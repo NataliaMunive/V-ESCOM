@@ -11,7 +11,6 @@ router = APIRouter(prefix="/profesores", tags=["Profesores"])
 def crear_profesor(profesor: ProfesorCreate, db: Session = Depends(get_db)):
     return profesor_service.crear_profesor(db, profesor)
 
-
 @router.get("/", response_model=List[ProfesorResponse])
 def listar_profesores(db: Session = Depends(get_db)):
     return profesor_service.obtener_profesores(db)
