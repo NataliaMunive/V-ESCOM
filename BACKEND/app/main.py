@@ -1,7 +1,14 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from app.routes import profesores, camaras, auth, reconocimiento
+
+app = FastAPI(title="VESCOM API")
+
+app.include_router(profesores.router)
+app.include_router(camaras.router)
+app.include_router(auth.router)
+app.include_router(reconocimiento.router)
 
 app = FastAPI(
     title="V-ESCOM API",
