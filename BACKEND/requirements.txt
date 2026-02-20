@@ -1,5 +1,22 @@
+# ── Web framework ────────────────────────────────────────────────────────────
 fastapi
-uvicorn
+uvicorn[standard]
+
+# ── Base de datos ────────────────────────────────────────────────────────────
 sqlalchemy
-pydantic
+psycopg2-binary
 python-dotenv
+
+# ── Validación ───────────────────────────────────────────────────────────────
+pydantic[email]
+
+# ── Autenticación ────────────────────────────────────────────────────────────
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# ── Reconocimiento facial ─────────────────────────────────────────────────────
+insightface
+onnxruntime
+opencv-python-headless
+numpy
