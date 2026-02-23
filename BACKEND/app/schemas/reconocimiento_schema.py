@@ -2,7 +2,6 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, date, time
 
-
 # ─── Persona autorizada ───────────────────────────────────────────────────────
 
 class CrearPersonaAutorizada(BaseModel):
