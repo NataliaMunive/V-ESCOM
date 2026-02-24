@@ -1,0 +1,57 @@
+:root {
+  --azul-ipn: #0033a0;
+  --azul-oscuro: #001f6b;
+  --azul-claro: #1a52c9;
+  --acento: #00c2e0;
+  --rojo-alerta: #e63946;
+  --verde-ok: #2dc653;
+  --fondo: #070d1a;
+  --fondo-card: #0d1628;
+  --fondo-card2: #111e35;
+  --borde: #1a2e52;
+  --texto: #e8edf7;
+  --texto-suave: #7a90b8;
+  --texto-muted: #3d567a;
+  --fuente-mono: 'Space Mono', monospace;
+  --fuente-ui: 'DM Sans', sans-serif;
+  --radio: 8px;
+  --sombra: 0 4px 24px rgba(0,0,0,0.4);
+  --transicion: 0.2s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--fuente-ui);
+  background: var(--fondo);
+  color: var(--texto);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--fuente-ui); border: none; background: none; }
+input, select, textarea { font-family: var(--fuente-ui); }
+img { max-width: 100%; display: block; }
+ul { list-style: none; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--fondo); }
+::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--azul-claro); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+@keyframes scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
