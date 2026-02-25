@@ -51,3 +51,21 @@ export const identificarRostro = (file, id_camara) => {
 
 export const getEventos = (params) => api.get('/reconocimiento/eventos', { params })
 export const getCamaras = () => api.get('/camaras/')
+
+// ── Cámaras CRUD ─────────────────────────────────────────────────
+export const crearCamara      = (datos)     => api.post('/camaras/', datos)
+export const actualizarCamara = (id, datos) => api.put(`/camaras/id_camara?id_camara=${id}`, datos)
+export const desactivarCamara = (id)        => api.delete(`/camaras/id_camara?id_camara=${id}`)
+
+// ── Alertas ───────────────────────────────────────────────────────
+export const getAlertas       = (params)    => api.get('/alertas/', { params })
+export const actualizarAlerta = (id, datos) => api.put(`/alertas/${id}`, datos)
+
+// ── Administradores ───────────────────────────────────────────────
+export const getAdmins        = ()          => api.get('/auth/admins')
+export const crearAdmin       = (datos)     => api.post('/auth/admins', datos)
+export const actualizarAdmin  = (id, datos) => api.put(`/auth/admins/${id}`, datos)
+export const desactivarAdmin  = (id)        => api.delete(`/auth/admins/${id}`)
+
+// ── Reportes ──────────────────────────────────────────────────────
+export const getReporte = (params) => api.get('/reconocimiento/eventos', { params })
