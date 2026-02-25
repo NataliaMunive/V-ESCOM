@@ -3,9 +3,13 @@ import { useAuth } from '../context/AuthContext'
 import './Layout.css'
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard',  icon: '◈' },
-  { to: '/personas',  label: 'Personas',   icon: '◉' },
-  { to: '/eventos',   label: 'Eventos',    icon: '◎' },
+  { to: '/dashboard',       label: 'Dashboard',        icon: '◈' },
+  { to: '/personas',        label: 'Personas',         icon: '◉' },
+  { to: '/camaras',         label: 'Cámaras',          icon: '⊞' },
+  { to: '/alertas',         label: 'Alertas',          icon: '⚠' },
+  { to: '/eventos',         label: 'Eventos',          icon: '◎' },
+  { to: '/reportes',        label: 'Reportes',         icon: '≡' },
+  { to: '/administradores', label: 'Administradores',  icon: '⊛' },
 ]
 
 export default function Layout() {
@@ -16,7 +20,6 @@ export default function Layout() {
 
   return (
     <div className="layout">
-      {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sidebar-logo">
           <span className="logo-mark">V</span>
@@ -55,7 +58,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* ── Contenido ── */}
       <main className="main-content">
         <Outlet />
       </main>
