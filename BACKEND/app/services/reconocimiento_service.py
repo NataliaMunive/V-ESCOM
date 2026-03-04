@@ -24,6 +24,7 @@ from app.schemas.reconocimiento_schema import (
     ResultadoReconocimiento,
     UpdPersonaAutorizada,
 )
+from app.services import notificacion_service
 from app.utils.face_utils import (
     bytes_a_embedding,
     embedding_a_bytes,
@@ -173,6 +174,12 @@ async def identificar_rostro(
 
     db.commit()
     db.refresh(evento)
+
+    if tipo_acceso == "No Autorizado":
+        try:
+            notificacion_service.notificar_intrusion(db, evento)
+        except Exception:
+            db.rollback()
 
     return ResultadoReconocimiento(
         tipo_acceso=tipo_acceso,

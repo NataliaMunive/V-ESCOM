@@ -290,6 +290,9 @@ Respuesta:
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60`                                    | Expiración del token en minutos       |
 | `SIMILITUD_UMBRAL`         | `0.40`                                     | Umbral ArcFace para identificación   |
 | `DEBUG`                    | `False`                                    | Modo debug (False en producción)     |
+| `TWILIO_ACCOUNT_SID`       | `ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`        | SID de cuenta de Twilio              |
+| `TWILIO_AUTH_TOKEN`        | `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`          | Token secreto de Twilio              |
+| `TWILIO_MESSAGING_SERVICE_SID` | `MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`    | Servicio de mensajería para SMS      |
 
 ## Seguridad
 
