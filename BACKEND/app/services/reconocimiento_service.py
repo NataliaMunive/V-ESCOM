@@ -34,6 +34,7 @@ from app.schemas.reconocimiento_schema import (
     UpdPersonaAutorizada,
 )
 from app.services import notificacion_service
+from app.services.log_sistema_service import registrar_log
 from app.utils.face_utils import (
     bytes_a_embedding,
     embedding_a_bytes,
@@ -103,6 +104,14 @@ async def registrar_rostro(
     try:
         embedding = extraer_embedding(contenido)
     except ValueError as e:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Motor_IA",
+            tipo="Reconocimiento",
+            mensaje=f"Error al extraer embedding para persona #{id_persona}: {e}",
+            commit=True,
+        )
         raise HTTPException(status_code=422, detail=str(e))
 
     # Guardar imagen en disco
@@ -115,6 +124,13 @@ async def registrar_rostro(
     # Persistir embedding y ruta
     persona.embedding = embedding_a_bytes(embedding)
     persona.ruta_rostro = ruta
+    registrar_log(
+        db,
+        nivel="INFO",
+        origen="Motor_IA",
+        tipo="Reconocimiento",
+        mensaje=f"Embedding registrado para persona autorizada #{id_persona}",
+    )
     db.commit()
     db.refresh(persona)
 
@@ -137,6 +153,14 @@ async def identificar_rostro(
     try:
         embedding_nuevo = extraer_embedding(contenido)
     except ValueError as e:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Motor_IA",
+            tipo="Reconocimiento",
+            mensaje=f"Error al extraer embedding en identificacion: {e}",
+            commit=True,
+        )
         raise HTTPException(status_code=422, detail=str(e))
 
     # Buscar la mejor coincidencia entre personas registradas
@@ -180,14 +204,43 @@ async def identificar_rostro(
         )
         db.add(pna)
 
+    registrar_log(
+        db,
+        nivel="INFO",
+        origen="Motor_IA",
+        tipo="Reconocimiento",
+        mensaje=(
+            f"Evento de acceso generado. tipo={tipo_acceso}, "
+            f"id_persona={id_persona}, camara={id_camara}, similitud={round(mejor_similitud, 4)}"
+        ),
+    )
+
     db.commit()
     db.refresh(evento)
 
     if tipo_acceso == "No Autorizado":
         try:
             notificacion_service.notificar_intrusion(db, evento)
-        except Exception:
+            registrar_log(
+                db,
+                nivel="INFO",
+                origen="Motor_IA",
+                tipo="Notificacion",
+                id_evento=evento.id_evento,
+                mensaje="Notificacion de intrusion disparada correctamente",
+                commit=True,
+            )
+        except Exception as e:
             db.rollback()
+            registrar_log(
+                db,
+                nivel="ERROR",
+                origen="Motor_IA",
+                tipo="Notificacion",
+                id_evento=evento.id_evento,
+                mensaje=f"Fallo al disparar notificacion de intrusion: {e}",
+                commit=True,
+            )
 
     return ResultadoReconocimiento(
         tipo_acceso=tipo_acceso,

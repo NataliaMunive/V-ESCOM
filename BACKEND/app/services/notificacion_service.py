@@ -22,6 +22,7 @@ from app.models.camara import Camara
 from app.models.evento import EventoAcceso
 from app.models.notificacion import Notificacion
 from app.models.profesor import Profesor
+from app.services.log_sistema_service import registrar_log
 from app.utils.phone_utils import normalizar_telefono_mx
 
 try:
@@ -93,6 +94,14 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
     )
     db.add(alerta)
     db.flush()
+    registrar_log(
+        db,
+        nivel="INFO",
+        origen="Servicio_SMS",
+        tipo="Notificacion",
+        id_evento=evento.id_evento,
+        mensaje=f"Alerta de intrusion creada (alerta #{alerta.id_alerta})",
+    )
     # Obtener destinatarios: administradores activos con telefono + profesores del cubiculo
     admins = _obtener_destinatarios_intrusion(db)
     id_cubiculo = _obtener_id_cubiculo_evento(db, evento)
@@ -107,6 +116,14 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
             vistos.add(telefono)
     # Si no hay destinatarios, registrar notificación sin destinatario y salir
     if not destinatarios:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Servicio_SMS",
+            tipo="Notificacion",
+            id_evento=evento.id_evento,
+            mensaje=f"Sin destinatarios validos para alerta #{alerta.id_alerta}",
+        )
         db.add(
             Notificacion(
                 id_alerta=alerta.id_alerta,
@@ -143,8 +160,18 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
                 )
                 estado = "Enviado"
                 enviados += 1
-            except Exception:
+            except Exception as e:
                 estado = "Error"
+                registrar_log(
+                    db,
+                    nivel="ERROR",
+                    origen="Servicio_SMS",
+                    tipo="Notificacion",
+                    id_evento=evento.id_evento,
+                    mensaje=(
+                        f"Fallo al enviar SMS a {telefono} en alerta #{alerta.id_alerta}: {e}"
+                    ),
+                )
 
         db.add(
             Notificacion(
@@ -157,4 +184,15 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
         )
 
     alerta.estado = "Notificada" if enviados > 0 else "Pendiente"
+    registrar_log(
+        db,
+        nivel="INFO",
+        origen="Servicio_SMS",
+        tipo="Notificacion",
+        id_evento=evento.id_evento,
+        mensaje=(
+            f"Proceso de notificacion finalizado para alerta #{alerta.id_alerta}. "
+            f"Destinatarios={len(destinatarios)}, enviados={enviados}, estado_alerta={alerta.estado}"
+        ),
+    )
     db.commit()

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.administrador import Administrador
 from app.schemas.auth_schema import CrearAdmin, UpdAdmin
+from app.services.log_sistema_service import registrar_log
 
 MAX_INTENTOS = 3
 BLOQUEO_MINUTOS = 5
@@ -41,6 +42,14 @@ def login(db: Session, email: str, contrasena: str) -> str:
 
     # No revelar si el correo existe o no (seguridad)
     if not admin:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Auth_Service",
+            tipo="Autenticacion",
+            mensaje=f"Intento de login con correo no registrado: {email}",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -55,6 +64,17 @@ def login(db: Session, email: str, contrasena: str) -> str:
             bloqueado_hasta = bloqueado_hasta.replace(tzinfo=timezone.utc)
         if now < bloqueado_hasta:
             segundos = int((bloqueado_hasta - now).total_seconds())
+            registrar_log(
+                db,
+                nivel="WARNING",
+                origen="Auth_Service",
+                tipo="Autenticacion",
+                mensaje=(
+                    f"Login rechazado por bloqueo temporal para admin #{admin.id_admin}. "
+                    f"Segundos restantes: {segundos}"
+                ),
+                commit=True,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Cuenta bloqueada. Intenta de nuevo en {segundos} segundos.",
@@ -65,6 +85,14 @@ def login(db: Session, email: str, contrasena: str) -> str:
             admin.bloqueado_hasta = None
 
     if not admin.activo:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Auth_Service",
+            tipo="Autenticacion",
+            mensaje=f"Login rechazado para admin inactivo #{admin.id_admin}",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cuenta desactivada. Contacta al administrador.",
@@ -76,11 +104,28 @@ def login(db: Session, email: str, contrasena: str) -> str:
         if admin.intentos_fallidos >= MAX_INTENTOS:
             admin.bloqueado_hasta = now + timedelta(minutes=BLOQUEO_MINUTOS)
             admin.intentos_fallidos = 0
+            registrar_log(
+                db,
+                nivel="WARNING",
+                origen="Auth_Service",
+                tipo="Autenticacion",
+                mensaje=(
+                    f"Bloqueo temporal aplicado a admin #{admin.id_admin} "
+                    f"por exceder intentos fallidos"
+                ),
+            )
             db.commit()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Demasiados intentos fallidos. Cuenta bloqueada por {BLOQUEO_MINUTOS} minutos.",
             )
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Auth_Service",
+            tipo="Autenticacion",
+            mensaje=f"Credenciales invalidas para admin #{admin.id_admin}",
+        )
         db.commit()
         restantes = MAX_INTENTOS - admin.intentos_fallidos
         raise HTTPException(
@@ -91,6 +136,13 @@ def login(db: Session, email: str, contrasena: str) -> str:
     # Login exitoso → reiniciar contadores
     admin.intentos_fallidos = 0
     admin.bloqueado_hasta = None
+    registrar_log(
+        db,
+        nivel="INFO",
+        origen="Auth_Service",
+        tipo="Autenticacion",
+        mensaje=f"Inicio de sesion exitoso para admin #{admin.id_admin}",
+    )
     db.commit()
 
     token = create_access_token({"sub": str(admin.id_admin), "email": admin.email})
