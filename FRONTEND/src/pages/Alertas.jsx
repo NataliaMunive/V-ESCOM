@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { getEventos } from '../services/api'
+import { getAlertas } from '../services/api'
 import './Alertas.css'
 
-const ESTADOS = ['Todos', 'No Autorizado']
+const ESTADOS = ['Todos', 'No Autorizado', 'Autorizado']
 
 export default function Alertas() {
   const [alertas, setAlertas] = useState([])
@@ -16,8 +16,8 @@ export default function Alertas() {
     setCargando(true)
     try {
       const params = { limit: limite }
-      if (filtro === 'No Autorizado') params.tipo = 'No Autorizado'
-      const r = await getEventos(params)
+      if (filtro !== 'Todos') params.tipo_acceso = filtro
+      const r = await getAlertas(params)
       setAlertas(r.data)
     } catch {}
     finally { setCargando(false) }
@@ -92,12 +92,12 @@ export default function Alertas() {
             const nivel    = getNivel(a.similitud)
             const esAlerta = a.tipo_acceso === 'No Autorizado'
             return (
-              <div key={a.id_evento} className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
+              <div key={a.id_alerta} className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
                 <div className={`alerta-icono ${esAlerta ? 'icono-danger' : 'icono-ok'}`}>
                   {esAlerta ? '⚠' : '✓'}
                 </div>
                 <div className="alerta-info">
-                  <div className="alerta-tipo">{a.tipo_acceso}</div>
+                  <div className="alerta-tipo">{a.tipo_acceso || a.tipo_alerta}</div>
                   <div className="alerta-meta mono">
                     {a.fecha} {a.hora?.slice(0, 8)} · Cámara {a.id_camara ?? '—'} · Evento #{a.id_evento}
                   </div>
