@@ -35,6 +35,7 @@ from app.schemas.reconocimiento_schema import (
 )
 from app.services import notificacion_service
 from app.services.log_sistema_service import registrar_log
+from app.services.websocket_manager import alertas_ws_manager
 from app.utils.face_utils import (
     bytes_a_embedding,
     embedding_a_bytes,
@@ -259,7 +260,11 @@ async def identificar_rostro(
 
     if tipo_acceso == "No Autorizado":
         try:
-            notificacion_service.notificar_intrusion(db, evento)
+            alerta_ws = notificacion_service.notificar_intrusion(db, evento)
+            await alertas_ws_manager.broadcast_json({
+                "type": "alerta_nueva",
+                "data": alerta_ws,
+            })
             registrar_log(
                 db,
                 nivel="INFO",

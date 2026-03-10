@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { getAlertas } from '../services/api'
+import { conectarAlertasWebSocket } from '../services/wsAlertas'
 import './Alertas.css'
 
 const ESTADOS = ['Todos', 'No Autorizado', 'Autorizado']
@@ -9,8 +10,41 @@ export default function Alertas() {
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('Todos')
   const [limite, setLimite] = useState(50)
+  const [conexionActiva, setConexionActiva] = useState(false)
+  const [alertaEnVivo, setAlertaEnVivo] = useState(null)
 
   useEffect(() => { cargar() }, [filtro, limite])
+
+  useEffect(() => {
+    const token = localStorage.getItem('vescom_token')
+    if (!token) return undefined
+
+    const ws = conectarAlertasWebSocket({
+      token,
+      onOpen: () => setConexionActiva(true),
+      onClose: () => setConexionActiva(false),
+      onError: () => setConexionActiva(false),
+      onMessage: (payload) => {
+        if (payload?.type !== 'alerta_nueva' || !payload.data) return
+
+        const nueva = payload.data
+        setAlertaEnVivo(nueva)
+        setAlertas((prev) => {
+          const coincideFiltro = filtro === 'Todos' || nueva.tipo_acceso === filtro
+          if (!coincideFiltro) return prev
+
+          const sinDuplicado = prev.filter((item) => item.id_alerta !== nueva.id_alerta)
+          return [nueva, ...sinDuplicado].slice(0, limite)
+        })
+
+        window.setTimeout(() => {
+          setAlertaEnVivo((actual) => (actual?.id_alerta === nueva.id_alerta ? null : actual))
+        }, 5000)
+      },
+    })
+
+    return () => ws.close()
+  }, [filtro, limite])
 
   const cargar = async () => {
     setCargando(true)
@@ -42,7 +76,16 @@ export default function Alertas() {
           <h1 className="page-title">Alertas y Detecciones</h1>
           <p className="page-sub">Registro de eventos de acceso · ESCOM-IPN</p>
         </div>
+        <div className={`estado-ws ${conexionActiva ? 'estado-ws-on' : 'estado-ws-off'}`}>
+          {conexionActiva ? 'En vivo' : 'Sin conexión en vivo'}
+        </div>
       </div>
+
+      {alertaEnVivo && (
+        <div className="alerta-live-banner">
+          Nueva alerta en vivo: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} en cámara {alertaEnVivo.id_camara ?? '—'}
+        </div>
+      )}
 
       <div className="al-stats">
         <div className="al-stat">

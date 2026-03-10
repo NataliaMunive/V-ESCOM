@@ -30,6 +30,25 @@ try:
 except ImportError:
     Client = None
 
+
+def _serializar_alerta_tiempo_real(
+    alerta: Alerta,
+    evento: EventoAcceso,
+    id_cubiculo: int | None,
+) -> dict:
+    return {
+        "id_alerta": alerta.id_alerta,
+        "id_evento": evento.id_evento,
+        "tipo_alerta": alerta.tipo_alerta,
+        "estado": alerta.estado,
+        "tipo_acceso": evento.tipo_acceso,
+        "id_camara": evento.id_camara,
+        "id_cubiculo": id_cubiculo,
+        "similitud": evento.similitud,
+        "fecha": str(alerta.fecha) if alerta.fecha is not None else None,
+        "hora": str(alerta.hora) if alerta.hora is not None else None,
+    }
+
 # ─── Funciones Auxiliares ────────────────────────────────────────────────────────
 # obtenemos destinatarios activos con telefono registrado para intrusiones
 def _obtener_destinatarios_intrusion(db: Session) -> List[Tuple[str, str]]:
@@ -86,7 +105,7 @@ def _crear_cliente_twilio():
     return Client(account_sid, auth_token)
 
 # notificar_intrusion: Crea una alerta y envía notificaciones SMS a los administradores activos con telefono registrado.
-def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
+def notificar_intrusion(db: Session, evento: EventoAcceso) -> dict:
     alerta = Alerta(
         id_evento=evento.id_evento,
         tipo_alerta="Intrusion",
@@ -134,7 +153,8 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
             )
         )
         db.commit()
-        return
+        db.refresh(alerta)
+        return _serializar_alerta_tiempo_real(alerta, evento, id_cubiculo)
     # Enviar SMS a cada destinatario y registrar resultado
     twilio_client = _crear_cliente_twilio()
     messaging_service_sid = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
@@ -196,3 +216,5 @@ def notificar_intrusion(db: Session, evento: EventoAcceso) -> None:
         ),
     )
     db.commit()
+    db.refresh(alerta)
+    return _serializar_alerta_tiempo_real(alerta, evento, id_cubiculo)

@@ -9,7 +9,7 @@ Este módulo inicializa la aplicación FastAPI y configura los componentes centr
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import profesores, camaras, auth, reconocimiento, alertas
+from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas
 
 # ─── Configuracion de la instancia ──────────────────────────────────────────────
 app = FastAPI(
@@ -39,6 +39,7 @@ app.include_router(reconocimiento.router)
 app.include_router(profesores.router)
 app.include_router(camaras.router)
 app.include_router(alertas.router)
+app.include_router(ws_alertas.router)
 
 @app.get("/", tags=["Root"])
 async def root():

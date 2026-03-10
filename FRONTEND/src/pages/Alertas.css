@@ -4,8 +4,38 @@
   display: flex; align-items: flex-start;
   justify-content: space-between; margin-bottom: 24px;
 }
+.estado-ws {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid var(--borde);
+  background: var(--fondo-card);
+}
+.estado-ws-on {
+  color: var(--verde-ok);
+  border-color: rgba(45,198,83,0.28);
+  background: rgba(45,198,83,0.08);
+}
+.estado-ws-off {
+  color: var(--texto-muted);
+  border-color: rgba(230,57,70,0.18);
+  background: rgba(230,57,70,0.06);
+}
 .page-title { font-size: 26px; font-weight: 700; color: var(--texto); letter-spacing: -0.3px; }
 .page-sub { font-size: 13px; color: var(--texto-muted); margin-top: 4px; }
+
+.alerta-live-banner {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,194,224,0.25);
+  background: linear-gradient(90deg, rgba(0,194,224,0.14), rgba(230,57,70,0.06));
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 600;
+}
 
 .al-stats {
   display: grid; grid-template-columns: repeat(4, 1fr);
