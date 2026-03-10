@@ -54,6 +54,7 @@ CREATE TABLE profesores (
     id_profesor SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     correo VARCHAR(100) UNIQUE NOT NULL,
+    telefono VARCHAR(20) UNIQUE,
     id_cubiculo INT REFERENCES cubiculos(id_cubiculo),
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -122,7 +123,8 @@ CREATE TABLE alertas (
     tipo_alerta VARCHAR(50) NOT NULL DEFAULT 'Intrusion',
     estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-    hora TIME NOT NULL DEFAULT CURRENT_TIME
+    hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    CONSTRAINT chk_estado_alerta CHECK (estado IN ('Pendiente', 'Notificada'))
 );
 
 CREATE TABLE notificaciones (
@@ -133,7 +135,9 @@ CREATE TABLE notificaciones (
     medio VARCHAR(20),
     estado VARCHAR(20),
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-    hora TIME NOT NULL DEFAULT CURRENT_TIME
+    hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    CONSTRAINT chk_medio_notificacion CHECK (medio IN ('SMS', 'Email', 'Push')),
+    CONSTRAINT chk_estado_notificacion CHECK (estado IN ('Pendiente', 'No configurado', 'Enviado', 'Error', 'Sin destinatario'))
 );
 
 CREATE TABLE logs_sistema (
@@ -145,5 +149,16 @@ CREATE TABLE logs_sistema (
     mensaje TEXT,
     fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- -----------------------------------------------------
+-- Índices de soporte para consultas de backend
+-- -----------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_camaras_id_cubiculo ON camaras(id_cubiculo);
+CREATE INDEX IF NOT EXISTS idx_eventos_acceso_id_camara ON eventos_acceso(id_camara);
+CREATE INDEX IF NOT EXISTS idx_alertas_id_evento ON alertas(id_evento);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_id_alerta ON notificaciones(id_alerta);
+CREATE INDEX IF NOT EXISTS idx_admin_activo_telefono ON administradores(activo, telefono);
+CREATE INDEX IF NOT EXISTS idx_profesores_cubiculo_activo_tel ON profesores(id_cubiculo, activo, telefono);
 
 COMMIT;

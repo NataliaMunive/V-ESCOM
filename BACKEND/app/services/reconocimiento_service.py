@@ -6,6 +6,15 @@ Flujo:
 
 Umbral de similitud: 0.40 (configurable en .env como SIMILITUD_UMBRAL).
 Con ArcFace normalizado, valores >0.4 indican la misma persona.
+
+Manejo de eventos:
+    - Si no autorizado, se registra en EventoAcceso y PersonaNoAutorizada.
+    - Se envía notificación de intrusión a administradores activos con teléfono registrado.
+
+Manejo de errores:
+    - 404 si la persona no existe al registrar rostro.
+    - 422 para errores en extracción de embedding (ej. imagen sin rostro).
+    - En caso de error en notificación, se registra el evento pero se omite el envío de SMS.
 """
 from __future__ import annotations
 
@@ -34,7 +43,6 @@ from app.utils.face_utils import (
 
 SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
 
-
 # ─── CRUD Personas Autorizadas ────────────────────────────────────────────────
 
 def crear_persona(db: Session, datos: CrearPersonaAutorizada) -> PersonaAutorizada:
@@ -44,11 +52,11 @@ def crear_persona(db: Session, datos: CrearPersonaAutorizada) -> PersonaAutoriza
     db.refresh(nueva)
     return nueva
 
-
+# Obtener todas las personas autorizadas o por ID
 def obtener_personas(db: Session):
     return db.query(PersonaAutorizada).all()
 
-
+# Obtener persona autorizada por ID
 def obtener_persona(db: Session, id_persona: int) -> PersonaAutorizada:
     p = db.query(PersonaAutorizada).filter(
         PersonaAutorizada.id_persona == id_persona
@@ -57,7 +65,7 @@ def obtener_persona(db: Session, id_persona: int) -> PersonaAutorizada:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
     return p
 
-
+# Actualizar persona autorizada por ID
 def actualizar_persona(
     db: Session, id_persona: int, datos: UpdPersonaAutorizada
 ) -> PersonaAutorizada:
@@ -68,7 +76,7 @@ def actualizar_persona(
     db.refresh(persona)
     return persona
 
-
+# Eliminar persona autorizada por ID (borrado físico)
 def eliminar_persona(db: Session, id_persona: int) -> None:
     persona = obtener_persona(db, id_persona)
     db.delete(persona)

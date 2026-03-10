@@ -3,6 +3,13 @@ Utilidades de reconocimiento facial usando InsightFace (ArcFace).
 - Detección de rostros con OpenCV/InsightFace.
 - Extracción de embeddings de 512 dimensiones.
 - Normalización L2 para comparación por similitud coseno.
+- Serialización/deserialización de embeddings a bytes para almacenamiento en BD.
+Requisitos:
+- insightface
+- onnxruntime
+Instalación:
+pip install insightface onnxruntime
+
 """
 from __future__ import annotations
 

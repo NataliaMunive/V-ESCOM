@@ -1,9 +1,19 @@
 """
 Servicio de autenticación.
+
 Reglas implementadas (doc §4.2.1):
   - Solo administradores pueden iniciar sesión.
   - 3 intentos fallidos → bloqueo de 5 minutos.
   - Contraseñas almacenadas como hash bcrypt.
+Funciones:
+    - login: Autentica y retorna JWT. Maneja bloqueos e intentos.
+    - CRUD Administrador: Crear, leer, actualizar (incluye contraseña), desactivar.
+Manejo de errores:
+    - 401 para credenciales incorrectas.
+    - 403 para cuenta bloqueada o desactivada.
+    - 404 para administrador no encontrado.
+    - 409 para correo ya registrado en creación/actualización.
+    - 422 para formato de teléfono inválido.
 """
 from datetime import datetime, timedelta, timezone
 

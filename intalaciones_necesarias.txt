@@ -1,0 +1,155 @@
+# Intalaciones necesarias - V-ESCOM
+
+Este archivo contiene los comandos necesarios para instalar y ejecutar el proyecto completo (Backend + Frontend).
+
+## 1) Requisitos previos (Windows)
+
+### Instalar Python 3.10+ (recomendado 3.11)
+> Nota: `python` **no se instala con pip**.
+
+Con `winget`:
+```powershell
+winget install Python.Python.3.11
+```
+
+Verificar:
+```powershell
+python --version
+pip --version
+```
+
+### Instalar Node.js (para Frontend)
+Con `winget`:
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
+
+Verificar:
+```powershell
+node -v
+npm -v
+```
+
+### Instalar PostgreSQL
+Con `winget`:
+```powershell
+winget install PostgreSQL.PostgreSQL
+```
+
+---
+
+## 2) Backend (FastAPI)
+
+Ubícate en la raíz del proyecto:
+```powershell
+cd C:\Users\muniv\Desktop\V-ESCOM
+```
+
+Crear y activar entorno virtual:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### Opción A (recomendada): instalar todo desde requirements
+```powershell
+pip install -r .\BACKEND\requirements.txt
+```
+
+### Opción B: instalar librerías manualmente (incluye Twilio)
+```powershell
+pip install fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary python-dotenv "pydantic[email]" "python-jose[cryptography]" "passlib[bcrypt]" python-multipart insightface onnxruntime opencv-python-headless numpy twilio
+```
+
+> Si quieres OpenCV con GUI (no headless), usa:
+```powershell
+pip uninstall -y opencv-python-headless
+pip install opencv-python
+```
+
+---
+
+## 3) Variables de entorno
+
+Copiar archivo de ejemplo y editar:
+```powershell
+copy .env.example .env
+```
+
+Configura en `.env` al menos:
+```dotenv
+DATABASE_URL=postgresql://postgres:TU_CONTRASENA@localhost/vescom
+SECRET_KEY=tu_clave_super_segura
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+SIMILITUD_UMBRAL=0.40
+DEBUG=False
+
+TWILIO_ACCOUNT_SID=tu_twilio_account_sid
+TWILIO_AUTH_TOKEN=tu_twilio_auth_token
+TWILIO_MESSAGING_SERVICE_SID=tu_twilio_messaging_service_sid
+```
+
+---
+
+## 4) Base de datos
+
+Crear base de datos:
+```sql
+CREATE DATABASE vescom;
+```
+
+Ejecutar script SQL del proyecto:
+```powershell
+psql -U postgres -d vescom -f .\BD\basededatos.sql
+```
+
+---
+
+## 5) Ejecutar Backend
+
+Desde la raíz del proyecto, con `.venv` activo:
+```powershell
+uvicorn BACKEND.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Documentación API:
+- http://localhost:8000/docs
+- http://localhost:8000/redoc
+
+---
+
+## 6) Frontend (React + Vite)
+
+En otra terminal:
+```powershell
+cd C:\Users\muniv\Desktop\V-ESCOM\FRONTEND
+npm install
+npm run dev
+```
+
+Frontend local:
+- http://localhost:5173
+
+---
+
+## 7) Comandos útiles
+
+Actualizar pip:
+```powershell
+python -m pip install --upgrade pip
+```
+
+Ver librerías instaladas:
+```powershell
+pip list
+```
+
+Instalar solo Twilio:
+```powershell
+pip install twilio
+```
+
+Instalar solo librerías de reconocimiento facial:
+```powershell
+pip install insightface onnxruntime opencv-python-headless numpy
+```

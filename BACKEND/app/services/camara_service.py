@@ -1,11 +1,33 @@
+"""
+Servicio de Gestión de Cámaras (V-ESCOM).
+Provee un CRUD para la administración de cámaras en cubículos.
+
+Campos clave:
+    - id_camara: Identificador único (PK).
+    - nombre: Nombre descriptivo de la camara.
+    - direccion_ip: IP de la camara para acceso y monitoreo.
+    - ubicacion: Descripcion fisica de donde esta instalada.
+    - id_cubiculo: Referencia al cubiculo asignado (FK).
+    - estado: Estado operativo (activa/inactiva).
+    
+Gestion de camaras:
+    - Crear: Permite registrar una nueva camara con validación de campos.
+    - Leer: Listar todas o por ID. Solo activas por defecto.        
+    - Actualizar: Permite modificar datos con validaciones basicas.
+    - Desactivar: Cambia el estado a inactiva sin eliminar el registro (Soft Delete).
+
+Manejo de Errores:
+    - Si la camara no existe, se devuelve un error 404.
+    - Validaciones básicas para campos requeridos y formato de IP.
+"""
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.camara import Camara
 
-
+# ─── CRUD Camaras ────────────────────────────────────────────────────────────────
 def crear_camara(db: Session, camara_data):
-
+    # crear camara con datos proporcionados
     nueva_camara = Camara(
         nombre=camara_data.nombre,
         direccion_ip=camara_data.direccion_ip,
@@ -20,11 +42,11 @@ def crear_camara(db: Session, camara_data):
 
     return nueva_camara
 
-
+# Obtener todas las camaras o por ID
 def obtener_camaras(db: Session):
     return db.query(Camara).all()
 
-
+# Obtener camara por ID
 def obtener_camara(db: Session, id_camara: int):
     camara = db.query(Camara).filter(
         Camara.id_camara == id_camara
@@ -35,7 +57,7 @@ def obtener_camara(db: Session, id_camara: int):
 
     return camara
 
-
+# Actualizar camara por ID
 def actualizar_camara(db: Session, id_camara: int, datos):
     camara = obtener_camara(db, id_camara)
 
@@ -47,7 +69,7 @@ def actualizar_camara(db: Session, id_camara: int, datos):
 
     return camara
 
-
+# Desactivar camara por ID (Soft Delete)
 def desactivar_camara(db: Session, id_camara: int):
     camara = obtener_camara(db, id_camara)
     camara.activa = False
