@@ -9,10 +9,13 @@ python-dotenv
 
 # ── Validación ───────────────────────────────────────────────────────────────
 pydantic[email]
+email-validator
 
 # ── Autenticación ────────────────────────────────────────────────────────────
 python-jose[cryptography]
+cryptography
 passlib[bcrypt]
+bcrypt
 python-multipart
 
 # ── Reconocimiento facial ─────────────────────────────────────────────────────

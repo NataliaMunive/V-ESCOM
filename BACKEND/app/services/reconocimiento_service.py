@@ -122,7 +122,19 @@ async def registrar_rostro(
         f.write(contenido)
 
     # Persistir embedding y ruta
-    persona.embedding = embedding_a_bytes(embedding)
+    try:
+        persona.embedding = embedding_a_bytes(embedding)
+    except RuntimeError as e:
+        registrar_log(
+            db,
+            nivel="ERROR",
+            origen="Motor_IA",
+            tipo="Configuracion",
+            mensaje=f"No se pudo cifrar el embedding para persona #{id_persona}: {e}",
+            commit=True,
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
     persona.ruta_rostro = ruta
     registrar_log(
         db,
@@ -174,7 +186,21 @@ async def identificar_rostro(
     mejor_persona: Optional[PersonaAutorizada] = None
 
     for p in personas:
-        emb_registrado = bytes_a_embedding(p.embedding)
+        try:
+            emb_registrado = bytes_a_embedding(p.embedding)
+        except RuntimeError as e:
+            registrar_log(
+                db,
+                nivel="ERROR",
+                origen="Motor_IA",
+                tipo="Configuracion",
+                mensaje=(
+                    f"No se pudo leer el embedding de persona #{p.id_persona}: {e}"
+                ),
+                commit=True,
+            )
+            continue
+
         sim = similitud_coseno(embedding_nuevo, emb_registrado)
         if sim > mejor_similitud:
             mejor_similitud = sim
@@ -199,8 +225,21 @@ async def identificar_rostro(
 
     # Si no autorizado, guardar también en personas_no_autorizadas
     if tipo_acceso == "No Autorizado":
+        try:
+            embedding_detectado = embedding_a_bytes(embedding_nuevo)
+        except RuntimeError as e:
+            registrar_log(
+                db,
+                nivel="ERROR",
+                origen="Motor_IA",
+                tipo="Configuracion",
+                mensaje=f"No se pudo cifrar embedding de intruso: {e}",
+                commit=True,
+            )
+            raise HTTPException(status_code=500, detail=str(e))
+
         pna = PersonaNoAutorizada(
-            embedding_detectado=embedding_a_bytes(embedding_nuevo),
+            embedding_detectado=embedding_detectado,
         )
         db.add(pna)
 

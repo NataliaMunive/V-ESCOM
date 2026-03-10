@@ -58,7 +58,7 @@ pip install -r .\BACKEND\requirements.txt
 
 ### Opción B: instalar librerías manualmente (incluye Twilio)
 ```powershell
-pip install fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary python-dotenv "pydantic[email]" "python-jose[cryptography]" "passlib[bcrypt]" python-multipart insightface onnxruntime opencv-python-headless numpy twilio
+pip install fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary python-dotenv "pydantic[email]" email-validator "python-jose[cryptography]" cryptography "passlib[bcrypt]" bcrypt python-multipart insightface onnxruntime opencv-python-headless numpy twilio
 ```
 
 > Si quieres OpenCV con GUI (no headless), usa:
@@ -83,6 +83,7 @@ SECRET_KEY=tu_clave_super_segura
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 SIMILITUD_UMBRAL=0.40
 DEBUG=False
+EMBEDDING_ENCRYPTION_KEY=tu_clave_fernet_base64_urlsafe
 
 TWILIO_ACCOUNT_SID=tu_twilio_account_sid
 TWILIO_AUTH_TOKEN=tu_twilio_auth_token

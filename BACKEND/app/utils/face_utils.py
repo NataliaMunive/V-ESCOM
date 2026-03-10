@@ -13,10 +13,20 @@ pip install insightface onnxruntime
 """
 from __future__ import annotations
 
-from typing import Optional
+import os
+from typing import Any, Optional
 
 import cv2
 import numpy as np
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except ImportError:
+    Fernet = None
+    InvalidToken = Exception
+
+EMBEDDING_PREFIX = b"ENC1:"
+_fernet: Optional[Any] = None
 
 # InsightFace se inicializa una sola vez al importar el módulo
 try:
@@ -48,6 +58,40 @@ except ImportError:
 
 
 # ─── Helpers de imagen ────────────────────────────────────────────────────────
+
+def _get_fernet(required: bool = True) -> Optional[Any]:
+    global _fernet
+
+    if _fernet is not None:
+        return _fernet
+
+    clave = os.getenv("EMBEDDING_ENCRYPTION_KEY")
+    if not clave:
+        if required:
+            raise RuntimeError(
+                "Falta EMBEDDING_ENCRYPTION_KEY en el entorno. "
+                "Genera una clave Fernet y configúrala en tu archivo .env"
+            )
+        return None
+
+    if Fernet is None:
+        raise RuntimeError(
+            "La dependencia 'cryptography' no está instalada. "
+            "Ejecuta: pip install cryptography"
+        )
+
+    try:
+        _fernet = Fernet(clave.encode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(
+            "EMBEDDING_ENCRYPTION_KEY no es una clave Fernet válida"
+        ) from exc
+
+    return _fernet
+
+
+def embedding_esta_cifrado(data: bytes) -> bool:
+    return data.startswith(EMBEDDING_PREFIX)
 
 def bytes_a_bgr(imagen_bytes: bytes) -> np.ndarray:
     """Convierte bytes de imagen (JPEG/PNG) a array BGR de OpenCV."""
@@ -87,12 +131,24 @@ def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
 
 
 def embedding_a_bytes(embedding: np.ndarray) -> bytes:
-    """Serializa el embedding a bytes para almacenar en la BD como LargeBinary."""
-    return embedding.tobytes()
+    """Serializa y cifra el embedding para almacenarlo en la BD como LargeBinary."""
+    fernet = _get_fernet(required=True)
+    datos = embedding.astype(np.float32).tobytes()
+    return EMBEDDING_PREFIX + fernet.encrypt(datos)
 
 
 def bytes_a_embedding(data: bytes) -> np.ndarray:
-    """Deserializa bytes de la BD a numpy array float32."""
+    """Deserializa bytes de la BD a numpy array float32.
+
+    Soporta embeddings cifrados y datos heredados en plano.
+    """
+    if embedding_esta_cifrado(data):
+        fernet = _get_fernet(required=True)
+        try:
+            data = fernet.decrypt(data[len(EMBEDDING_PREFIX):])
+        except InvalidToken as exc:
+            raise RuntimeError("No se pudo descifrar el embedding almacenado") from exc
+
     return np.frombuffer(data, dtype=np.float32)
 
 
