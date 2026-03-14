@@ -50,11 +50,11 @@ export default function Login() {
         <div className="login-feature-list">
           <div className="feature-item">
             <span className="feature-dot" />
-            Detección facial en tiempo real con ArcFace
+            Detección facial
           </div>
           <div className="feature-item">
             <span className="feature-dot" />
-            Alertas automáticas ante intrusos
+            Alertas ante intrusos
           </div>
           <div className="feature-item">
             <span className="feature-dot" />
