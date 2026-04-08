@@ -10,7 +10,8 @@ Este módulo inicializa la aplicación FastAPI y configura los componentes centr
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas
-
+from app.routes import reportes
+      
 # ─── Configuracion de la instancia ──────────────────────────────────────────────
 app = FastAPI(
     title="V-ESCOM API",
@@ -40,7 +41,7 @@ app.include_router(profesores.router)
 app.include_router(camaras.router)
 app.include_router(alertas.router)
 app.include_router(ws_alertas.router)
-
+app.include_router(reportes.router)
 @app.get("/", tags=["Root"])
 async def root():
     """Endpoint de salud para verificar que la API está operativa."""

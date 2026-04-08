@@ -18,7 +18,7 @@ export default function Personas() {
   const [busqueda, setBusqueda] = useState('')
   const [subiendoFoto, setSubiendoFoto] = useState(null) // id_persona
   const fotoRef = useRef()
-
+  const [duplicadoInfo, setDuplicadoInfo] = useState(null)
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
@@ -84,20 +84,58 @@ export default function Personas() {
     }
   }
 
-  const handleFoto = async (e, id_persona) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setSubiendoFoto(id_persona)
-    try {
-      await subirRostro(id_persona, file)
-      cargar()
-    } catch (err) {
+  const handleFoto = async (e, id_persona, forzar = false) => {
+  const file = e?.target?.files?.[0] ?? fotoRef.current._pendingFile
+  if (!file) return
+ 
+  // guardamos referencia al archivo para poder re-usarla si el usuario fuerza
+  fotoRef.current._pendingFile = file
+  fotoRef.current._pendingId   = id_persona
+ 
+  setSubiendoFoto(id_persona)
+  setDuplicadoInfo(null)
+ 
+  try {
+    await subirRostro(id_persona, file, forzar)
+    // limpiar estado pendiente
+    fotoRef.current._pendingFile = null
+    fotoRef.current._pendingId   = null
+    if (fotoRef.current) fotoRef.current.value = ''
+    cargar()
+  } catch (err) {
+    if (err.response?.status === 409) {
+      // Posible duplicado — mostrar modal de advertencia
+      const detail = err.response.data?.detail
+      setDuplicadoInfo({
+        id_persona,
+        similitud: detail?.similitud,
+        persona_similar: detail?.persona_similar,
+      })
+    } else {
       alert(err.response?.data?.detail || 'Error al subir la foto')
-    } finally {
-      setSubiendoFoto(null)
-      fotoRef.current.value = ''
     }
+  } finally {
+    setSubiendoFoto(null)
   }
+}
+ 
+// helper para cuando el usuario decide forzar desde el modal
+const handleForzarRostro = async () => {
+  const id_persona = fotoRef.current._pendingId
+  setDuplicadoInfo(null)
+  setSubiendoFoto(id_persona)
+  try {
+    await subirRostro(id_persona, fotoRef.current._pendingFile, true)
+    fotoRef.current._pendingFile = null
+    fotoRef.current._pendingId   = null
+    if (fotoRef.current) fotoRef.current.value = ''
+    cargar()
+  } catch (err) {
+    alert(err.response?.data?.detail || 'Error al subir la foto')
+  } finally {
+    setSubiendoFoto(null)
+  }
+}
 
   const filtradas = personas.filter(p =>
     `${p.nombre} ${p.apellidos} ${p.email}`.toLowerCase().includes(busqueda.toLowerCase())
@@ -252,6 +290,51 @@ export default function Personas() {
           </div>
         </div>
       )}
+      {duplicadoInfo && (
+  <div className="modal-overlay" onClick={() => setDuplicadoInfo(null)}>
+    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+      <div className="modal-header">
+        <h3>⚠ Posible rostro duplicado</h3>
+        <button className="modal-close" onClick={() => setDuplicadoInfo(null)}>✕</button>
+      </div>
+      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <p style={{ fontSize: 14, color: 'var(--texto)' }}>
+          El rostro que intentas registrar tiene una similitud de{' '}
+          <strong>{((duplicadoInfo.similitud ?? 0) * 100).toFixed(1)}%</strong> con otra persona
+          ya registrada:
+        </p>
+        {duplicadoInfo.persona_similar && (
+          <div style={{
+            background: 'var(--fondo-card2)', border: '1px solid var(--borde)',
+            borderRadius: 8, padding: '12px 16px', fontSize: 13
+          }}>
+            <div style={{ fontWeight: 600, color: 'var(--texto)' }}>
+              {duplicadoInfo.persona_similar.nombre} {duplicadoInfo.persona_similar.apellidos}
+            </div>
+            <div style={{ color: 'var(--texto-suave)', marginTop: 4 }}>
+              {duplicadoInfo.persona_similar.rol} · ID #{duplicadoInfo.persona_similar.id_persona}
+            </div>
+          </div>
+        )}
+        <p style={{ fontSize: 13, color: 'var(--texto-suave)' }}>
+          ¿Deseas continuar y registrar el embedding de todas formas?
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="btn-secondary" onClick={() => setDuplicadoInfo(null)}>
+            Cancelar
+          </button>
+          <button
+            className="btn-primary"
+            style={{ background: 'linear-gradient(135deg, #c0392b, #e74c3c)' }}
+            onClick={handleForzarRostro}
+          >
+            Continuar de todas formas
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }
