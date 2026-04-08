@@ -36,10 +36,13 @@ export const getPersona = (id) => api.get(`/reconocimiento/personas/${id}`)
 export const crearPersona = (datos) => api.post('/reconocimiento/personas', datos)
 export const actualizarPersona = (id, datos) => api.put(`/reconocimiento/personas/${id}`, datos)
 export const eliminarPersona = (id) => api.delete(`/reconocimiento/personas/${id}`)
-export const subirRostro = (id, file) => {
+export const subirRostro = (id, file, forzar = false) => {
   const form = new FormData()
   form.append('imagen', file)
-  return api.post(`/reconocimiento/personas/${id}/rostro`, form)
+  const url = forzar
+    ? `/reconocimiento/personas/${id}/rostro?forzar=true`
+    : `/reconocimiento/personas/${id}/rostro`
+  return api.post(url, form)
 }
 
 export const identificarRostro = (file, id_camara) => {
@@ -69,3 +72,5 @@ export const desactivarAdmin  = (id)        => api.delete(`/auth/admins/${id}`)
 
 // ── Reportes ──────────────────────────────────────────────────────
 export const getReporte = (params) => api.get('/reconocimiento/eventos', { params })
+
+export const exportarPDF = (params) => api.get('/reportes/pdf', { params, responseType: 'blob' })

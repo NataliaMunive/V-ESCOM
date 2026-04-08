@@ -104,14 +104,29 @@ def eliminar_persona(
 async def registrar_rostro(
     id_persona: int,
     imagen: UploadFile = File(..., description="Foto del rostro (JPEG/PNG, 1 sola cara)"),
+    forzar: bool = Query(
+        False,
+        description=(
+            "Si es true, omite la verificación de duplicados y guarda el embedding "
+            "aunque exista una persona similar registrada."
+        ),
+    ),
     db: Session = Depends(get_db),
     _: Administrador = Depends(get_current_admin),
 ):
     """
     Sube la imagen de referencia de una persona autorizada,
     extrae el embedding ArcFace y lo almacena en la BD.
+ 
+    Antes de guardar, verifica que no exista un rostro similar en la base de datos
+    (detección de duplicados - CU05 flujo alterno 2a).
+    Si se detecta un posible duplicado, retorna HTTP 409 con los datos de la persona similar.
+    Para continuar de todas formas, envía ?forzar=true.
     """
-    return await reconocimiento_service.registrar_rostro(db, id_persona, imagen)
+    return await reconocimiento_service.registrar_rostro(
+        db, id_persona, imagen, forzar=forzar
+    )
+ 
 
 
 # ─── Identificación ───────────────────────────────────────────────────────────

@@ -86,21 +86,22 @@ def eliminar_persona(db: Session, id_persona: int) -> None:
 
 
 # ─── Registro de rostro ───────────────────────────────────────────────────────
-
 async def registrar_rostro(
     db: Session,
     id_persona: int,
     imagen: UploadFile,
     directorio_fotos: str = "fotos_rostros",
+    forzar: bool = False,          
 ) -> DatosPersonaAutorizada:
     """
     Extrae el embedding de la imagen subida y lo guarda en la BD.
-    También guarda la imagen en disco como referencia.
+    Antes de persistir, verifica que no exista un rostro similar registrado
+    para otra persona (duplicado). Si hay coincidencia y forzar=False,
+    lanza HTTP 409 con los datos del posible duplicado.
     """
     persona = obtener_persona(db, id_persona)
-
     contenido = await imagen.read()
-
+ 
     # Extraer embedding
     try:
         embedding = extraer_embedding(contenido)
@@ -114,14 +115,63 @@ async def registrar_rostro(
             commit=True,
         )
         raise HTTPException(status_code=422, detail=str(e))
-
+ 
+    if not forzar:
+        personas_con_embedding = (
+            db.query(PersonaAutorizada)
+            .filter(
+                PersonaAutorizada.embedding.isnot(None),
+                PersonaAutorizada.id_persona != id_persona,   # excluir a sí mismo
+            )
+            .all()
+        )
+ 
+        UMBRAL_DUPLICADO = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+ 
+        for p_existente in personas_con_embedding:
+            try:
+                emb_existente = bytes_a_embedding(p_existente.embedding)
+            except RuntimeError:
+                continue
+ 
+            sim = similitud_coseno(embedding, emb_existente)
+            if sim >= UMBRAL_DUPLICADO:
+                registrar_log(
+                    db,
+                    nivel="WARNING",
+                    origen="Motor_IA",
+                    tipo="Reconocimiento",
+                    mensaje=(
+                        f"Posible duplicado detectado al registrar persona #{id_persona}: "
+                        f"similitud {sim:.4f} con persona #{p_existente.id_persona}"
+                    ),
+                    commit=True,
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "mensaje": "Posible rostro duplicado detectado.",
+                        "similitud": round(sim, 4),
+                        "persona_similar": {
+                            "id_persona": p_existente.id_persona,
+                            "nombre": p_existente.nombre,
+                            "apellidos": p_existente.apellidos,
+                            "rol": p_existente.rol,
+                        },
+                        "sugerencia": (
+                            "Si deseas continuar de todas formas, "
+                            "envía la petición con el parámetro ?forzar=true"
+                        ),
+                    },
+                )
+ 
     # Guardar imagen en disco
     os.makedirs(directorio_fotos, exist_ok=True)
     nombre_archivo = f"{id_persona}_{imagen.filename}"
     ruta = os.path.join(directorio_fotos, nombre_archivo)
     with open(ruta, "wb") as f:
         f.write(contenido)
-
+ 
     # Persistir embedding y ruta
     try:
         persona.embedding = embedding_a_bytes(embedding)
@@ -135,7 +185,7 @@ async def registrar_rostro(
             commit=True,
         )
         raise HTTPException(status_code=500, detail=str(e))
-
+ 
     persona.ruta_rostro = ruta
     registrar_log(
         db,
@@ -146,7 +196,6 @@ async def registrar_rostro(
     )
     db.commit()
     db.refresh(persona)
-
     return _a_schema(persona)
 
 
@@ -224,7 +273,6 @@ async def identificar_rostro(
     )
     db.add(evento)
 
-    # Si no autorizado, guardar también en personas_no_autorizadas
     if tipo_acceso == "No Autorizado":
         try:
             embedding_detectado = embedding_a_bytes(embedding_nuevo)
@@ -238,9 +286,39 @@ async def identificar_rostro(
                 commit=True,
             )
             raise HTTPException(status_code=500, detail=str(e))
+        ruta_captura = None
+        try:
+            directorio_intrusos = os.getenv("DIRECTORIO_INTRUSOS", "capturas_intrusos")
+            os.makedirs(directorio_intrusos, exist_ok=True)
+ 
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            nombre_archivo = f"intruso_{timestamp}.jpg"
+            ruta_captura = os.path.join(directorio_intrusos, nombre_archivo)
+ 
+            with open(ruta_captura, "wb") as f:
+                f.write(contenido)
+ 
+            registrar_log(
+                db,
+                nivel="INFO",
+                origen="Motor_IA",
+                tipo="Reconocimiento",
+                mensaje=f"Imagen de intruso guardada en: {ruta_captura}",
+            )
+        except Exception as e_img:
+            registrar_log(
+                db,
+                nivel="WARNING",
+                origen="Motor_IA",
+                tipo="Reconocimiento",
+                mensaje=f"No se pudo guardar la imagen del intruso: {e_img}",
+            )
+            ruta_captura = None
 
         pna = PersonaNoAutorizada(
             embedding_detectado=embedding_detectado,
+            ruta_imagen_captura=ruta_captura,   # ← campo ahora poblado
         )
         db.add(pna)
 

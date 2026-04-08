@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { getReporte } from '../services/api'
+import { getReporte, exportarPDF } from '../services/api'
 import './Reportes.css'
 
 const HOY    = new Date().toISOString().slice(0, 10)
 const HACE30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+const [descargandoPDF, setDescargandoPDF] = useState(false)
 
 export default function Reportes() {
   const [eventos, setEventos] = useState([])
@@ -46,6 +47,34 @@ export default function Reportes() {
     a.href = url; a.download = `reporte_vescom_${filtros.fecha_desde}_${filtros.fecha_hasta}.csv`
     a.click(); URL.revokeObjectURL(url)
   }
+
+const exportarReportePDF = async () => {
+  setDescargandoPDF(true)
+  try {
+    const params = {}
+    if (filtros.tipo !== 'Todos') params.tipo = filtros.tipo
+    if (filtros.id_camara) params.id_camara = parseInt(filtros.id_camara)
+    if (filtros.fecha_desde) params.fecha_desde = filtros.fecha_desde
+    if (filtros.fecha_hasta) params.fecha_hasta = filtros.fecha_hasta
+    params.limit = filtros.limit
+ 
+    const response = await exportarPDF(params)
+ 
+    // Crear enlace de descarga desde el blob
+    const url  = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href  = url
+    link.download = `reporte_vescom_${filtros.fecha_desde}_${filtros.fecha_hasta}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    alert('Error al generar el PDF. Verifica que el servidor tenga instalado reportlab.')
+  } finally {
+    setDescargandoPDF(false)
+  }
+}
 
   const total  = eventos.length
   const noAuth = eventos.filter(e => e.tipo_acceso === 'No Autorizado').length
@@ -97,8 +126,15 @@ export default function Reportes() {
             {cargando ? 'Generando...' : '⊕ Generar reporte'}
           </button>
           {generado && eventos.length > 0 && (
-            <button className="btn-export" onClick={exportarCSV}>↓ Exportar CSV</button>
-          )}
+  <button
+    className="btn-export"
+    style={{ background: 'rgba(230,57,70,0.1)', borderColor: 'rgba(230,57,70,0.3)', color: 'var(--rojo-alerta)' }}
+    onClick={exportarReportePDF}
+    disabled={descargandoPDF}
+  >
+    {descargandoPDF ? 'Generando PDF...' : '↓ Exportar PDF'}
+  </button>
+)}
         </div>
       </div>
 
