@@ -83,7 +83,6 @@ SECRET_KEY=tu_clave_super_segura
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 SIMILITUD_UMBRAL=0.40
 DEBUG=False
-EMBEDDING_ENCRYPTION_KEY=tu_clave_fernet_base64_urlsafe
 
 TWILIO_ACCOUNT_SID=tu_twilio_account_sid
 TWILIO_AUTH_TOKEN=tu_twilio_auth_token
@@ -101,7 +100,7 @@ CREATE DATABASE vescom;
 
 Ejecutar script SQL del proyecto:
 ```powershell
-psql -U postgres -d vescom -f .\BD\basededatos.sql
+psql -U postgres -d vescom -f .\BD\script_basededatos.sql
 ```
 
 ---

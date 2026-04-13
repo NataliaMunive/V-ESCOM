@@ -5,7 +5,8 @@ Gestionan el histórico de detecciones del sistema, diferenciando entre
 accesos de personal conocido y registros de intrusos.
 """
 
-from sqlalchemy import Column, Integer, String, Float, Date, Time, LargeBinary, ForeignKey
+from pgvector.sqlalchemy import VECTOR
+from sqlalchemy import Column, Integer, String, Float, Date, Time, ForeignKey
 from sqlalchemy.sql import func
 from app.bd import Base
 
@@ -54,4 +55,4 @@ class PersonaNoAutorizada(Base):
     ruta_imagen_captura = Column(String(255))
     
     # Vector característico del rostro desconocido para comparaciones futuras
-    embedding_detectado = Column(LargeBinary)
+    embedding_detectado = Column(VECTOR(512))

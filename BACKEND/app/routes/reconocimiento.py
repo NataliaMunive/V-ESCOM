@@ -49,7 +49,7 @@ def listar_personas(
     _: Administrador = Depends(get_current_admin),
 ):
     personas = reconocimiento_service.obtener_personas(db)
-    return [reconocimiento_service._a_schema(p) for p in personas]
+    return [reconocimiento_service._a_schema(p, db) for p in personas]
 
 
 @router.get(
@@ -63,7 +63,7 @@ def obtener_persona(
     _: Administrador = Depends(get_current_admin),
 ):
     p = reconocimiento_service.obtener_persona(db, id_persona)
-    return reconocimiento_service._a_schema(p)
+    return reconocimiento_service._a_schema(p, db)
 
 
 @router.put(
@@ -78,7 +78,7 @@ def actualizar_persona(
     _: Administrador = Depends(get_current_admin),
 ):
     p = reconocimiento_service.actualizar_persona(db, id_persona, datos)
-    return reconocimiento_service._a_schema(p)
+    return reconocimiento_service._a_schema(p, db)
 
 
 @router.delete(

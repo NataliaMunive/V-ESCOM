@@ -21,12 +21,12 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-import numpy as np
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.models.evento import EventoAcceso, PersonaNoAutorizada
 from app.models.persona_autorizada import PersonaAutorizada
+from app.models.rostro_autorizado import RostroAutorizado
 from app.schemas.reconocimiento_schema import (
     CrearPersonaAutorizada,
     DatosPersonaAutorizada,
@@ -36,12 +36,7 @@ from app.schemas.reconocimiento_schema import (
 from app.services import notificacion_service
 from app.services.log_sistema_service import registrar_log
 from app.services.websocket_manager import alertas_ws_manager
-from app.utils.face_utils import (
-    bytes_a_embedding,
-    embedding_a_bytes,
-    extraer_embedding,
-    similitud_coseno,
-)
+from app.utils.face_utils import extraer_embedding
 
 SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
 
@@ -117,24 +112,25 @@ async def registrar_rostro(
         raise HTTPException(status_code=422, detail=str(e))
  
     if not forzar:
-        personas_con_embedding = (
-            db.query(PersonaAutorizada)
-            .filter(
-                PersonaAutorizada.embedding.isnot(None),
-                PersonaAutorizada.id_persona != id_persona,   # excluir a sí mismo
-            )
-            .all()
-        )
- 
         UMBRAL_DUPLICADO = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
- 
-        for p_existente in personas_con_embedding:
-            try:
-                emb_existente = bytes_a_embedding(p_existente.embedding)
-            except RuntimeError:
-                continue
- 
-            sim = similitud_coseno(embedding, emb_existente)
+        distancia = RostroAutorizado.embedding.cosine_distance(embedding.tolist())
+        duplicado = (
+            db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
+            .join(
+                PersonaAutorizada,
+                PersonaAutorizada.id_persona == RostroAutorizado.id_persona,
+            )
+            .filter(
+                RostroAutorizado.embedding.isnot(None),
+                RostroAutorizado.id_persona != id_persona,
+            )
+            .order_by(distancia)
+            .first()
+        )
+
+        if duplicado:
+            _, p_existente, distancia_duplicado = duplicado
+            sim = 1.0 - float(distancia_duplicado)
             if sim >= UMBRAL_DUPLICADO:
                 registrar_log(
                     db,
@@ -173,19 +169,14 @@ async def registrar_rostro(
         f.write(contenido)
  
     # Persistir embedding y ruta
-    try:
-        persona.embedding = embedding_a_bytes(embedding)
-    except RuntimeError as e:
-        registrar_log(
-            db,
-            nivel="ERROR",
-            origen="Motor_IA",
-            tipo="Configuracion",
-            mensaje=f"No se pudo cifrar el embedding para persona #{id_persona}: {e}",
-            commit=True,
-        )
-        raise HTTPException(status_code=500, detail=str(e))
- 
+    rostro = RostroAutorizado(
+        id_persona=id_persona,
+        embedding=embedding.tolist(),
+        descripcion="Registro automático",
+        ruta_imagen=ruta,
+    )
+    db.add(rostro)
+
     persona.ruta_rostro = ruta
     registrar_log(
         db,
@@ -196,7 +187,7 @@ async def registrar_rostro(
     )
     db.commit()
     db.refresh(persona)
-    return _a_schema(persona)
+    return _a_schema(persona, db)
 
 
 # ─── Identificación ───────────────────────────────────────────────────────────
@@ -225,36 +216,25 @@ async def identificar_rostro(
         )
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Buscar la mejor coincidencia entre personas registradas
-    personas = (
-        db.query(PersonaAutorizada)
-        .filter(PersonaAutorizada.embedding.isnot(None))
-        .all()
+    # Buscar la mejor coincidencia entre personas registradas usando pgvector
+    distancia = RostroAutorizado.embedding.cosine_distance(embedding_nuevo.tolist())
+    coincidencia = (
+        db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
+        .join(
+            PersonaAutorizada,
+            PersonaAutorizada.id_persona == RostroAutorizado.id_persona,
+        )
+        .filter(RostroAutorizado.embedding.isnot(None))
+        .order_by(distancia)
+        .first()
     )
 
     mejor_similitud = -1.0
     mejor_persona: Optional[PersonaAutorizada] = None
 
-    for p in personas:
-        try:
-            emb_registrado = bytes_a_embedding(p.embedding)
-        except RuntimeError as e:
-            registrar_log(
-                db,
-                nivel="ERROR",
-                origen="Motor_IA",
-                tipo="Configuracion",
-                mensaje=(
-                    f"No se pudo leer el embedding de persona #{p.id_persona}: {e}"
-                ),
-                commit=True,
-            )
-            continue
-
-        sim = similitud_coseno(embedding_nuevo, emb_registrado)
-        if sim > mejor_similitud:
-            mejor_similitud = sim
-            mejor_persona = p
+    if coincidencia:
+        _, mejor_persona, mejor_distancia = coincidencia
+        mejor_similitud = 1.0 - float(mejor_distancia)
 
     # Clasificar
     if mejor_persona and mejor_similitud >= SIMILITUD_UMBRAL:
@@ -274,18 +254,7 @@ async def identificar_rostro(
     db.add(evento)
 
     if tipo_acceso == "No Autorizado":
-        try:
-            embedding_detectado = embedding_a_bytes(embedding_nuevo)
-        except RuntimeError as e:
-            registrar_log(
-                db,
-                nivel="ERROR",
-                origen="Motor_IA",
-                tipo="Configuracion",
-                mensaje=f"No se pudo cifrar embedding de intruso: {e}",
-                commit=True,
-            )
-            raise HTTPException(status_code=500, detail=str(e))
+        embedding_detectado = embedding_nuevo.tolist()
         ruta_captura = None
         try:
             directorio_intrusos = os.getenv("DIRECTORIO_INTRUSOS", "capturas_intrusos")
@@ -376,7 +345,19 @@ async def identificar_rostro(
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _a_schema(persona: PersonaAutorizada) -> DatosPersonaAutorizada:
+def _a_schema(persona: PersonaAutorizada, db: Optional[Session] = None) -> DatosPersonaAutorizada:
+    tiene_embedding = False
+    if db is not None:
+        tiene_embedding = (
+            db.query(RostroAutorizado)
+            .filter(RostroAutorizado.id_persona == persona.id_persona)
+            .first()
+            is not None
+        )
+    elif persona.ruta_rostro is not None:
+        # Fallback para llamadas sin sesión (retrocompatibilidad)
+        tiene_embedding = True
+
     return DatosPersonaAutorizada(
         id_persona=persona.id_persona,
         nombre=persona.nombre,
@@ -386,6 +367,6 @@ def _a_schema(persona: PersonaAutorizada) -> DatosPersonaAutorizada:
         id_cubiculo=persona.id_cubiculo,
         rol=persona.rol,
         ruta_rostro=persona.ruta_rostro,
-        tiene_embedding=persona.embedding is not None,
+        tiene_embedding=tiene_embedding,
         fecha_registro=persona.fecha_registro,
     )

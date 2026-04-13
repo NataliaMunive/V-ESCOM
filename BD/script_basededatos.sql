@@ -56,8 +56,16 @@ CREATE TABLE IF NOT EXISTS personas_autorizadas (
     id_cubiculo INT REFERENCES cubiculos(id_cubiculo),
     rol VARCHAR(30) DEFAULT 'Profesor',
     ruta_rostro VARCHAR(255), 
-    embedding vector(512),
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rostros_autorizados (
+    id_rostro SERIAL PRIMARY KEY,
+    id_persona INT REFERENCES personas_autorizadas(id_persona) ON DELETE CASCADE,
+    embedding vector(512),
+    descripcion VARCHAR(50),
+    ruta_imagen VARCHAR(255),
+    fecha_captura TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS personas_no_autorizadas (
@@ -123,6 +131,60 @@ CREATE TABLE IF NOT EXISTS profesores (
 );
 
 -- -----------------------------------------------------
+-- Índices para rendimiento
+-- -----------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_rostros_autorizados_embedding
+    ON rostros_autorizados USING hnsw (embedding vector_cosine_ops)
+    WHERE embedding IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_rostros_id_persona
+    ON rostros_autorizados(id_persona);
+
+CREATE INDEX IF NOT EXISTS idx_personas_no_autorizadas_embedding
+    ON personas_no_autorizadas USING hnsw (embedding_detectado vector_cosine_ops)
+    WHERE embedding_detectado IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_camaras_id_cubiculo
+    ON camaras(id_cubiculo);
+
+CREATE INDEX IF NOT EXISTS idx_personas_autorizadas_id_cubiculo
+    ON personas_autorizadas(id_cubiculo);
+
+CREATE INDEX IF NOT EXISTS idx_profesores_id_cubiculo
+    ON profesores(id_cubiculo);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_acceso_id_camara
+    ON eventos_acceso(id_camara);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_acceso_id_persona
+    ON eventos_acceso(id_persona);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_acceso_tipo_fecha
+    ON eventos_acceso(tipo_acceso, fecha DESC);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_acceso_fecha_hora
+    ON eventos_acceso(fecha DESC, hora DESC);
+
+CREATE INDEX IF NOT EXISTS idx_alertas_id_evento
+    ON alertas(id_evento);
+
+CREATE INDEX IF NOT EXISTS idx_alertas_estado_fecha
+    ON alertas(estado, fecha DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notificaciones_id_alerta
+    ON notificaciones(id_alerta);
+
+CREATE INDEX IF NOT EXISTS idx_notificaciones_estado_medio_fecha
+    ON notificaciones(estado, medio, fecha DESC);
+
+CREATE INDEX IF NOT EXISTS idx_logs_sistema_id_evento
+    ON logs_sistema(id_evento);
+
+CREATE INDEX IF NOT EXISTS idx_logs_sistema_fecha
+    ON logs_sistema(fecha DESC);
+
+-- -----------------------------------------------------
 -- Administrador inicial
 -- Email: admin@ipn.mx
 -- Contraseña: Admin123!
@@ -137,4 +199,6 @@ VALUES (
     '$2b$12$I9a.XUiOYFs01rzl.jGTzutBDgTgBujUENpWO/0ojDrvIxYWr4BS.',
     true,
     0
-);
+)
+ON CONFLICT (email) DO NOTHING;
+

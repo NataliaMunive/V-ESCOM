@@ -1,11 +1,11 @@
 """
 Modelo de Datos: Personas Autorizadas - V-ESCOM
 
-Entidad central para el reconocimiento facial. Almacena la identidad,
-el rol y la firma biométrica (embedding) del personal con acceso permitido.
+Entidad central para el reconocimiento facial. Almacena la identidad
+y metadatos de las personas con acceso permitido.
 """
 
-from sqlalchemy import Column, Integer, String, LargeBinary, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey
 from sqlalchemy.sql import func
 from app.bd import Base
 
@@ -13,7 +13,8 @@ class PersonaAutorizada(Base):
     """
     Representa a cualquier individuo validado por el sistema (Profesores, Alumnos, Staff).
     
-    Contiene el vector de características faciales que el motor de IA utiliza para realizar la clasificación en los eventos de acceso.
+    Los embeddings faciales asociados se almacenan en la tabla rostros_autorizados
+    para permitir múltiples firmas por persona.
     """
     __tablename__ = "personas_autorizadas"
 
@@ -37,10 +38,6 @@ class PersonaAutorizada(Base):
     # Gestión Biométrica
     # Ruta al archivo físico de la imagen utilizada para el registro inicial
     ruta_rostro = Column(String(255))
-    
-    # Firma matemática del rostro (Vector de 512 dimensiones)
-    # Almacenado como binario para optimizar la velocidad de comparación
-    embedding = Column(LargeBinary)
     
     # Auditoría de alta en el sistema
     fecha_registro = Column(TIMESTAMP, server_default=func.now())

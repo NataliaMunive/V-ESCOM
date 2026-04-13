@@ -3,30 +3,20 @@ Utilidades de reconocimiento facial usando InsightFace (ArcFace).
 - Detección de rostros con OpenCV/InsightFace.
 - Extracción de embeddings de 512 dimensiones.
 - Normalización L2 para comparación por similitud coseno.
-- Serialización/deserialización de embeddings a bytes para almacenamiento en BD.
+
 Requisitos:
 - insightface
 - onnxruntime
+
 Instalación:
 pip install insightface onnxruntime
-
 """
 from __future__ import annotations
 
-import os
-from typing import Any, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
-
-try:
-    from cryptography.fernet import Fernet, InvalidToken
-except ImportError:
-    Fernet = None
-    InvalidToken = Exception
-
-EMBEDDING_PREFIX = b"ENC1:"
-_fernet: Optional[Any] = None
 
 # InsightFace se inicializa una sola vez al importar el módulo
 try:
@@ -40,7 +30,7 @@ try:
             # buffalo_l = ArcFace R100 + RetinaFace (detector)
             _face_app = FaceAnalysis(
                 name="buffalo_l",
-                providers=["CPUExecutionProvider"],  # cambia a CUDAExecutionProvider si tienes GPU
+                providers=["CPUExecutionProvider"],
             )
             _face_app.prepare(ctx_id=0, det_size=(640, 640))
         return _face_app
@@ -57,42 +47,6 @@ except ImportError:
         )
 
 
-# ─── Helpers de imagen ────────────────────────────────────────────────────────
-
-def _get_fernet(required: bool = True) -> Optional[Any]:
-    global _fernet
-
-    if _fernet is not None:
-        return _fernet
-
-    clave = os.getenv("EMBEDDING_ENCRYPTION_KEY")
-    if not clave:
-        if required:
-            raise RuntimeError(
-                "Falta EMBEDDING_ENCRYPTION_KEY en el entorno. "
-                "Genera una clave Fernet y configúrala en tu archivo .env"
-            )
-        return None
-
-    if Fernet is None:
-        raise RuntimeError(
-            "La dependencia 'cryptography' no está instalada. "
-            "Ejecuta: pip install cryptography"
-        )
-
-    try:
-        _fernet = Fernet(clave.encode("utf-8"))
-    except Exception as exc:
-        raise RuntimeError(
-            "EMBEDDING_ENCRYPTION_KEY no es una clave Fernet válida"
-        ) from exc
-
-    return _fernet
-
-
-def embedding_esta_cifrado(data: bytes) -> bool:
-    return data.startswith(EMBEDDING_PREFIX)
-
 def bytes_a_bgr(imagen_bytes: bytes) -> np.ndarray:
     """Convierte bytes de imagen (JPEG/PNG) a array BGR de OpenCV."""
     array = np.frombuffer(imagen_bytes, dtype=np.uint8)
@@ -107,8 +61,6 @@ def normalizar_l2(vector: np.ndarray) -> np.ndarray:
     norma = np.linalg.norm(vector)
     return vector / norma if norma > 0 else vector
 
-
-# ─── Extracción de embedding ──────────────────────────────────────────────────
 
 def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
     """
@@ -126,39 +78,15 @@ def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
             f"Se detectaron {len(rostros)} rostros. Envía una imagen con un solo rostro"
         )
 
-    embedding = rostros[0].normed_embedding   # InsightFace ya lo normaliza
+    embedding = rostros[0].normed_embedding
     return embedding.astype(np.float32)
 
-
-def embedding_a_bytes(embedding: np.ndarray) -> bytes:
-    """Serializa y cifra el embedding para almacenarlo en la BD como LargeBinary."""
-    fernet = _get_fernet(required=True)
-    datos = embedding.astype(np.float32).tobytes()
-    return EMBEDDING_PREFIX + fernet.encrypt(datos)
-
-
-def bytes_a_embedding(data: bytes) -> np.ndarray:
-    """Deserializa bytes de la BD a numpy array float32.
-
-    Soporta embeddings cifrados y datos heredados en plano.
-    """
-    if embedding_esta_cifrado(data):
-        fernet = _get_fernet(required=True)
-        try:
-            data = fernet.decrypt(data[len(EMBEDDING_PREFIX):])
-        except InvalidToken as exc:
-            raise RuntimeError("No se pudo descifrar el embedding almacenado") from exc
-
-    return np.frombuffer(data, dtype=np.float32)
-
-
-# ─── Comparación ──────────────────────────────────────────────────────────────
 
 def similitud_coseno(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
     """
     Similitud coseno entre dos vectores normalizados.
-    Retorna un valor entre -1.0 y 1.0  (1.0 = misma persona).
+    Retorna un valor entre -1.0 y 1.0 (1.0 = misma persona).
     """
     vec_a = normalizar_l2(vec_a)
     vec_b = normalizar_l2(vec_b)
-    return float(np.dot(vec_a, vec_b))# Placeholder for face utilities (to be implemented later).
+    return float(np.dot(vec_a, vec_b))

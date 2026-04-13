@@ -5,6 +5,7 @@ uvicorn[standard]
 # ── Base de datos ────────────────────────────────────────────────────────────
 sqlalchemy
 psycopg2-binary
+pgvector
 python-dotenv
 
 # ── Validación ───────────────────────────────────────────────────────────────

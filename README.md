@@ -19,7 +19,7 @@
 | Componente     | Tecnología                                    |
 |----------------|-----------------------------------------------|
 | **Framework**  | FastAPI + Uvicorn                             |
-| **ORM/Base de datos** | SQLAlchemy + PostgreSQL                       |
+| **ORM/Base de datos** | SQLAlchemy + PostgreSQL + pgvector           |
 | **Reconocimiento facial** | InsightFace (ArcFace) + OpenCV + NumPy        |
 | **Autenticación**       | JWT (python-jose) + Bcrypt                    |
 | **Validación**  | Pydantic v2                                   |
@@ -44,7 +44,7 @@ V-ESCOM/
 │   │   │   ├── log_sistema.py
 │   │   │   ├── entrada.py
 │   │   │   ├── cubiculo.py
-│   │   │   └── embedding.py
+│   │   │   └── rostro_autorizado.py
 │   │   ├── schemas/           # Schemas Pydantic (DTO)
 │   │   │   ├── auth_schema.py
 │   │   │   ├── profesor_schema.py
@@ -67,7 +67,7 @@ V-ESCOM/
 │   │       └── face_utils.py  # Utilidades de reconocimiento facial
 │   └── requirements.txt       # Dependencias de Python
 ├── BD/
-│   └── basededatos.sql        # Script SQL para crear tablas
+│   └── script_basededatos.sql # Script SQL principal para crear tablas
 ├── .env.example               # Variables de entorno de ejemplo
 ├── .gitignore                 # Archivos a ignorar en git
 └── README.md                  # Este archivo
@@ -116,8 +116,10 @@ CREATE DATABASE vescom;
 
 b) **Ejecutar script SQL** (desde conexión a `vescom`):
 ```bash
-psql -U postgres -d vescom -f ../BD/basededatos.sql
+psql -U postgres -d vescom -f ../BD/script_basededatos.sql
 ```
+
+> El esquema usa la extensión `vector` de pgvector para almacenar y buscar embeddings faciales.
 
 ### 6. Configurar Variables de Entorno
 
@@ -272,9 +274,9 @@ Respuesta:
 | `cubiculos`                | Cubículos/salas a vigilar                           |
 | `camaras`                  | Cámaras IP con ubicación y estado                   |
 | `profesores`               | Profesores (referencia de ocupantes)                |
-| `personas_autorizadas`     | Personas registradas con rostro y embedding         |
+| `personas_autorizadas`     | Datos de identidad de personas con acceso autorizado |
+| `rostros_autorizados`      | Múltiples firmas faciales (embeddings) por persona  |
 | `personas_no_autorizadas`  | Rostros detectados no identificados                 |
-| `embeddings`               | Vectores ArcFace (512-d) de personas autorizadas    |
 | `eventos_acceso`           | Historial de intentos de acceso (autorizado/no)     |
 | `alertas`                  | Alertas generadas por accesos sospechosos           |
 | `notificaciones`           | Notificaciones enviadas (SMS, email, etc.)          |
@@ -300,7 +302,7 @@ Respuesta:
 - ✅ **JWT**: Firmado con HS256, configurable en `.env`.
 - ✅ **Bloqueo de cuenta**: 3 intentos fallidos → bloqueo 5 minutos.
 - ✅ **CORS**: Configurable en `app/main.py` (actualmente `*`, cambiar en producción).
-- ✅ **BYTEA para embeddings**: Binario serializado, sin dependencia de `pgvector`.
+- ✅ **pgvector**: Embeddings ArcFace de 512 dimensiones con búsqueda por similitud coseno.
 
 ## Troubleshooting
 
@@ -312,7 +314,7 @@ Asegúrate de estar en la carpeta `BACKEND/` cuando ejecutes el servidor.
 
 Ejecuta el script SQL en la BD:
 ```bash
-psql -U postgres -d vescom -f ../BD/basededatos.sql
+psql -U postgres -d vescom -f ../BD/script_basededatos.sql
 ```
 
 ### Error al conectar a PostgreSQL
