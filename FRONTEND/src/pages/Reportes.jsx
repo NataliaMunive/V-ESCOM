@@ -4,9 +4,10 @@ import './Reportes.css'
 
 const HOY    = new Date().toISOString().slice(0, 10)
 const HACE30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const [descargandoPDF, setDescargandoPDF] = useState(false)
+
 
 export default function Reportes() {
+  const [descargandoPDF, setDescargandoPDF] = useState(false)
   const [eventos, setEventos] = useState([])
   const [cargando, setCargando] = useState(false)
   const [generado, setGenerado] = useState(false)
@@ -29,7 +30,10 @@ export default function Reportes() {
         return ev.fecha >= filtros.fecha_desde && ev.fecha <= filtros.fecha_hasta
       })
       setEventos(filtrados); setGenerado(true)
-    } catch {}
+    } catch (error) {
+      console.error('Error al obtener el reporte:', error)
+      alert('No se pudo obtener el reporte. Revisa la consola para mas detalles.')
+    }
     finally { setCargando(false) }
   }
 
@@ -70,6 +74,7 @@ const exportarReportePDF = async () => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   } catch (err) {
+    console.error('Error detallado del PDF:', err)
     alert('Error al generar el PDF. Verifica que el servidor tenga instalado reportlab.')
   } finally {
     setDescargandoPDF(false)
