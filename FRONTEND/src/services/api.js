@@ -57,8 +57,8 @@ export const getCamaras = () => api.get('/camaras/')
 
 // ── Cámaras CRUD ─────────────────────────────────────────────────
 export const crearCamara      = (datos)     => api.post('/camaras/', datos)
-export const actualizarCamara = (id, datos) => api.put(`/camaras/id_camara?id_camara=${id}`, datos)
-export const desactivarCamara = (id)        => api.delete(`/camaras/id_camara?id_camara=${id}`)
+export const actualizarCamara = (id, datos) => api.put(`/camaras/${id}`, datos)
+export const desactivarCamara = (id)        => api.delete(`/camaras/${id}`)
 
 // ── Alertas ───────────────────────────────────────────────────────
 export const getAlertas       = (params)    => api.get('/alertas/', { params })
