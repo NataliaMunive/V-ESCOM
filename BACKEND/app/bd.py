@@ -47,3 +47,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Import all models to ensure they are registered with SQLAlchemy Base
+from app.models.administrador import Administrador
+from app.models.alerta import Alerta
+from app.models.camara import Camara
+from app.models.cubiculo import Cubiculo
+from app.models.entrada import Entrada
+from app.models.evento import EventoAcceso
+from app.models.log_sistema import LogSistema
+from app.models.notificacion import Notificacion
+from app.models.persona_autorizada import PersonaAutorizada
+from app.models.profesor import Profesor
+from app.models.rostro_autorizado import RostroAutorizado
