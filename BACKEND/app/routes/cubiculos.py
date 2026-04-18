@@ -44,3 +44,13 @@ def actualizar_cubiculo(
 ):
     """Actualiza los datos de un cubículo."""
     return cubiculo_service.actualizar_cubiculo(db, id_cubiculo, datos)
+
+@router.delete("/{id_cubiculo}", summary="Eliminar cubículo")
+def eliminar_cubiculo(
+    id_cubiculo: int,
+    db: Session = Depends(get_db),
+    _admin: Administrador = Depends(get_current_admin)
+):
+    """Elimina un cubículo si no tiene relaciones activas."""
+    cubiculo_service.eliminar_cubiculo(db, id_cubiculo)
+    return {"message": "Cubículo eliminado correctamente"}

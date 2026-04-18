@@ -4,7 +4,9 @@ import './Layout.css'
 
 const navItems = [
   { to: '/dashboard',       label: 'Dashboard',        icon: '◈' },
+  { to: '/cubiculos',       label: 'Cubículos',        icon: '▣' },
   { to: '/personas',        label: 'Personas',         icon: '◉' },
+  { to: '/profesores',      label: 'Profesores',       icon: '◍' },
   { to: '/camaras',         label: 'Cámaras',          icon: '⊞' },
   { to: '/alertas',         label: 'Alertas',          icon: '⚠' },
   { to: '/eventos',         label: 'Eventos',          icon: '◎' },

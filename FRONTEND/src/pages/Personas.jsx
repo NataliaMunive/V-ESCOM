@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   getPersonas, crearPersona, actualizarPersona,
-  eliminarPersona, subirRostro
+  eliminarPersona, subirRostro, getCubiculos
 } from '../services/api'
 import './Personas.css'
 
@@ -19,7 +19,8 @@ export default function Personas() {
   const [subiendoFoto, setSubiendoFoto] = useState(null) // id_persona
   const fotoRef = useRef()
   const [duplicadoInfo, setDuplicadoInfo] = useState(null)
-  useEffect(() => { cargar() }, [])
+  const [cubiculos, setCubiculos] = useState([])
+  useEffect(() => { cargar(); cargarCubiculos() }, [])
 
   const cargar = async () => {
     setCargando(true)
@@ -28,6 +29,15 @@ export default function Personas() {
       setPersonas(res.data)
     } catch {}
     finally { setCargando(false) }
+  }
+
+  const cargarCubiculos = async () => {
+    try {
+      const res = await getCubiculos()
+      setCubiculos(res.data || [])
+    } catch {
+      setCubiculos([])
+    }
   }
 
   const abrirCrear = () => {
@@ -207,14 +217,20 @@ const handleForzarRostro = async () => {
                       {/* Subir foto */}
                       <button
                         className="btn-accion"
+                        type="button"
                         title="Subir foto de rostro"
+                        aria-label="Subir foto de rostro"
                         onClick={() => { fotoRef.current.dataset.id = p.id_persona; fotoRef.current.click() }}
                         disabled={subiendoFoto === p.id_persona}
                       >
-                        {subiendoFoto === p.id_persona ? '...' : '📷'}
+                        {subiendoFoto === p.id_persona ? '...' : <img src="/icons/foto.svg" alt="" />}
                       </button>
-                      <button className="btn-accion" title="Editar" onClick={() => abrirEditar(p)}>✏️</button>
-                      <button className="btn-accion btn-danger" title="Eliminar" onClick={() => handleEliminar(p)}>🗑️</button>
+                      <button className="btn-accion" type="button" title="Editar" aria-label="Editar" onClick={() => abrirEditar(p)}>
+                        <img src="/icons/editar.svg" alt="" />
+                      </button>
+                      <button className="btn-accion btn-danger" type="button" title="Eliminar" aria-label="Eliminar" onClick={() => handleEliminar(p)}>
+                        <img src="/icons/eliminar.svg" alt="" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -273,8 +289,15 @@ const handleForzarRostro = async () => {
                   </select>
                 </div>
                 <div className="field">
-                  <label>ID Cubículo</label>
-                  <input name="id_cubiculo" type="number" value={form.id_cubiculo} onChange={handleChange} />
+                  <label>Cubículo</label>
+                  <select name="id_cubiculo" value={form.id_cubiculo} onChange={handleChange}>
+                    <option value="">Sin asignar</option>
+                    {cubiculos.map(c => (
+                      <option key={c.id_cubiculo} value={c.id_cubiculo}>
+                        {c.numero_cubiculo} (ID {c.id_cubiculo})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

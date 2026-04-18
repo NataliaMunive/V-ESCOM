@@ -55,6 +55,18 @@ export const identificarRostro = (file, id_camara) => {
 export const getEventos = (params) => api.get('/reconocimiento/eventos', { params })
 export const getCamaras = () => api.get('/camaras/')
 
+// ── Cubículos CRUD ───────────────────────────────────────────────
+export const getCubiculos      = ()          => api.get('/cubiculos/')
+export const crearCubiculo     = (datos)     => api.post('/cubiculos/', datos)
+export const actualizarCubiculo= (id, datos) => api.put(`/cubiculos/${id}`, datos)
+export const eliminarCubiculo  = (id)        => api.delete(`/cubiculos/${id}`)
+
+// ── Profesores CRUD ──────────────────────────────────────────────
+export const getProfesores      = ()          => api.get('/profesores/')
+export const crearProfesor      = (datos)     => api.post('/profesores/', datos)
+export const actualizarProfesor = (id, datos) => api.put(`/profesores/${id}`, datos)
+export const desactivarProfesor = (id)        => api.delete(`/profesores/${id}`)
+
 // ── Cámaras CRUD ─────────────────────────────────────────────────
 export const crearCamara      = (datos)     => api.post('/camaras/', datos)
 export const actualizarCamara = (id, datos) => api.put(`/camaras/${id}`, datos)

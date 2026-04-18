@@ -25,12 +25,18 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.camara import Camara
 
+
+def _normalizar_direccion_ip(direccion_ip):
+    if direccion_ip is None:
+        return None
+    return str(direccion_ip)
+
 # ─── CRUD Camaras ────────────────────────────────────────────────────────────────
 def crear_camara(db: Session, camara_data):
     # crear camara con datos proporcionados
     nueva_camara = Camara(
         nombre=camara_data.nombre,
-        direccion_ip=camara_data.direccion_ip,
+        direccion_ip=_normalizar_direccion_ip(camara_data.direccion_ip),
         ubicacion=camara_data.ubicacion,
         id_cubiculo=camara_data.id_cubiculo,
         estado=camara_data.estado
@@ -61,7 +67,11 @@ def obtener_camara(db: Session, id_camara: int):
 def actualizar_camara(db: Session, id_camara: int, datos):
     camara = obtener_camara(db, id_camara)
 
-    for key, value in datos.model_dump(exclude_unset=True).items():
+    update_data = datos.model_dump(exclude_unset=True)
+    if "direccion_ip" in update_data:
+        update_data["direccion_ip"] = _normalizar_direccion_ip(update_data["direccion_ip"])
+
+    for key, value in update_data.items():
         setattr(camara, key, value)
 
     db.commit()

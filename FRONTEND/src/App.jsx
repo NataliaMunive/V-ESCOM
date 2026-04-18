@@ -3,8 +3,10 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Personas from './pages/Personas'
+import Profesores from './pages/Profesores'
 import Eventos from './pages/Eventos'
 import Camaras from './pages/Camaras'
+import Cubiculos from './pages/Cubiculos'
 import Alertas from './pages/Alertas'
 import Administradores from './pages/Administradores'
 import Reportes from './pages/Reportes'
@@ -30,6 +32,8 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"        element={<Dashboard />} />
             <Route path="personas"         element={<Personas />} />
+            <Route path="profesores"       element={<Profesores />} />
+            <Route path="cubiculos"        element={<Cubiculos />} />
             <Route path="eventos"          element={<Eventos />} />
             <Route path="camaras"          element={<Camaras />} />
             <Route path="alertas"          element={<Alertas />} />

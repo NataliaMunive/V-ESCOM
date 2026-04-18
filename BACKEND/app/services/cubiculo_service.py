@@ -5,6 +5,7 @@ Provee un CRUD básico para los cubículos.
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.models.cubiculo import Cubiculo
 
@@ -35,3 +36,15 @@ def actualizar_cubiculo(db: Session, id_cubiculo: int, datos):
     db.commit()
     db.refresh(cubiculo)
     return cubiculo
+
+def eliminar_cubiculo(db: Session, id_cubiculo: int):
+    cubiculo = obtener_cubiculo(db, id_cubiculo)
+    try:
+        db.delete(cubiculo)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede eliminar: el cubículo está en uso por cámaras, personas o profesores."
+        )

@@ -125,9 +125,13 @@ export default function Administradores() {
                   <td className="td-muted mono">{a.fecha_registro?.slice(0, 10) || '—'}</td>
                   <td>
                     <div className="acciones">
-                      <button className="btn-icono" title="Editar" onClick={() => abrirEditar(a)}>✏️</button>
+                      <button className="btn-icono" type="button" title="Editar" aria-label="Editar" onClick={() => abrirEditar(a)}>
+                        <img src="/icons/editar.svg" alt="" />
+                      </button>
                       {a.activo && a.id_admin !== adminActual?.id_admin && (
-                        <button className="btn-icono btn-danger" title="Desactivar" onClick={() => handleDesactivar(a)}>⏹</button>
+                        <button className="btn-icono btn-danger" type="button" title="Desactivar" aria-label="Desactivar" onClick={() => handleDesactivar(a)}>
+                          <img src="/icons/desactivar.svg" alt="" />
+                        </button>
                       )}
                     </div>
                   </td>

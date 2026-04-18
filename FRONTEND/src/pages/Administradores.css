@@ -66,6 +66,12 @@
 .btn-icono:hover { border-color: var(--azul-claro); background: var(--fondo-card2); }
 .btn-icono.btn-danger:hover { border-color: var(--rojo-alerta); background: rgba(230,57,70,0.1); }
 
+.btn-icono img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .tabla-vacia, .tabla-cargando {
   text-align: center; padding: 60px 20px; color: var(--texto-muted);
   display: flex; flex-direction: column; align-items: center; gap: 16px; font-size: 14px;

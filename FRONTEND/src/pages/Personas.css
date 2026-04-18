@@ -133,6 +133,12 @@
 .btn-accion.btn-danger:hover { border-color: var(--rojo-alerta); background: rgba(230,57,70,0.1); }
 .btn-accion:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.btn-accion img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 /* ── Estados ─────────────────────────────────────────────────── */
 .tabla-vacia, .tabla-cargando {
   text-align: center;

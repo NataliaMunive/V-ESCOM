@@ -1,0 +1,45 @@
+.profesores-page {
+  display: grid;
+  gap: 20px;
+}
+
+.prof-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.prof-stat {
+  background: var(--fondo-card, #0f172a);
+  border: 1px solid var(--borde, #1f2a44);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prof-stat-ok {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.prof-stat-off {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.prof-stat-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--texto, #e5e7eb);
+}
+
+.prof-stat-label {
+  font-size: 0.82rem;
+  color: var(--texto-suave, #94a3b8);
+}
+
+.btn-icono img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
