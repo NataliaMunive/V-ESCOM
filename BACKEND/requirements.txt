@@ -16,7 +16,7 @@ email-validator
 python-jose[cryptography]
 cryptography
 passlib[bcrypt]
-bcrypt
+bcrypt==4.0.1
 python-multipart
 
 # ── Reconocimiento facial ─────────────────────────────────────────────────────
@@ -27,3 +27,5 @@ numpy
 
 # ── Notificaciones ─────────────────────────────────────────────────────────────
 twilio
+
+
