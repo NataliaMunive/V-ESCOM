@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   getPersonas, crearPersona, actualizarPersona,
-  eliminarPersona, subirRostro, getCubiculos
+  eliminarPersona, subirRostro
 } from '../services/api'
 import './Personas.css'
 
