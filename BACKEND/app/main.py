@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas, cubiculos
 from app.routes import reportes
 from app.routes import stream
-
+from app.routes import rtsp as rtsp_routes
+from app.services.rtsp_manager import rtsp_manager
 # ─── Configuracion de la instancia ──────────────────────────────────────────────
 app = FastAPI(
     title="V-ESCOM API",
@@ -45,6 +46,8 @@ app.include_router(alertas.router)
 app.include_router(ws_alertas.router)
 app.include_router(reportes.router)
 app.include_router(stream.router)
+app.include_router(rtsp_routes.router)
+rtsp_manager.inicializar(app)  
 @app.get("/", tags=["Root"])
 async def root():
     """Endpoint de salud para verificar que la API está operativa."""

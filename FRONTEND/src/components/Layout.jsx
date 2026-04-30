@@ -12,6 +12,7 @@ const navItems = [
   { to: '/eventos',         label: 'Eventos',          icon: '◎' },
   { to: '/reportes',        label: 'Reportes',         icon: '≡' },
   { to: '/administradores', label: 'Administradores',  icon: '⊛' },
+  { to: '/streams', label: 'Streams', icon: '▶' },
 ]
 
 export default function Layout() {

@@ -11,6 +11,7 @@ import Alertas from './pages/Alertas'
 import Administradores from './pages/Administradores'
 import Reportes from './pages/Reportes'
 import Layout from './components/Layout'
+import CamarasStream from './pages/CamarasStream'
 
 function RutaProtegida({ children }) {
   const { admin, cargando } = useAuth()
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="alertas"          element={<Alertas />} />
             <Route path="administradores"  element={<Administradores />} />
             <Route path="reportes"         element={<Reportes />} />
+            <Route path="streams" element={<CamarasStream />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
