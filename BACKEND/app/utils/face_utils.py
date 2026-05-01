@@ -1,15 +1,5 @@
 """
 Utilidades de reconocimiento facial usando InsightFace (ArcFace).
-- Detección de rostros con OpenCV/InsightFace.
-- Extracción de embeddings de 512 dimensiones.
-- Normalización L2 para comparación por similitud coseno.
-
-Requisitos:
-- insightface
-- onnxruntime
-
-Instalación:
-pip install insightface onnxruntime
 """
 from __future__ import annotations
 
@@ -18,7 +8,6 @@ from typing import Optional
 import cv2
 import numpy as np
 
-# InsightFace se inicializa una sola vez al importar el módulo
 try:
     from insightface.app import FaceAnalysis
 
@@ -27,12 +16,8 @@ try:
     def _get_face_app() -> FaceAnalysis:
         global _face_app
         if _face_app is None:
-            # buffalo_l = ArcFace R100 + RetinaFace (detector)
-            _face_app = FaceAnalysis(
-                name="buffalo_l",
-                providers=["CPUExecutionProvider"],
-            )
-            _face_app.prepare(ctx_id=0, det_size=(640, 640))
+            _face_app = FaceAnalysis(name="buffalo_l")
+            _face_app.prepare(ctx_id=-1, det_size=(640, 640))
         return _face_app
 
     INSIGHTFACE_DISPONIBLE = True
