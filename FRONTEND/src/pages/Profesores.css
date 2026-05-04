@@ -1,6 +1,8 @@
 .profesores-page {
+  padding: 36px 40px;
   display: grid;
   gap: 20px;
+  animation: fadeIn 0.3s ease;
 }
 
 .prof-stats {

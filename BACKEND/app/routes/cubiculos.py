@@ -1,3 +1,10 @@
+"""
+Router de Gestión de Cubículos - V-ESCOM
+
+Define los endpoints para la administración de cubículos dentro del sistema de vigilancia.
+Permite crear, listar, actualizar y eliminar cubículos, así como asignar responsables.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
