@@ -38,6 +38,7 @@ class CameraWorker:
         self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
         self._capture_thread: Optional[threading.Thread] = None
         self._analysis_task: Optional[asyncio.Task] = None
+        self.ultimo_jpg: Optional[bytes] = None
 
     # ── Thread de captura (OpenCV) ────────────────────────────────────────────
     def _capture_loop(self) -> None:
@@ -60,7 +61,7 @@ class CameraWorker:
                 continue
 
             reintentos = 0
-            ultimo_envio = 0.0
+            ultimo_analisis = 0.0
             log.info(f"[Cam#{self.id_camara}] ✓ Stream abierto")
 
             while self.activo:
@@ -69,26 +70,28 @@ class CameraWorker:
                     log.warning(f"[Cam#{self.id_camara}] Frame perdido.")
                     break
 
-                ahora = time.monotonic()
-                if ahora - ultimo_envio < INTERVALO_SEG:
-                    continue  # No dormir — seguir vaciando el buffer de la cámara
-
-                ultimo_envio = ahora
-
                 try:
                     ok, buf = cv2.imencode(  # type: ignore
-                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
+                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70]
                     )
                     if not ok:
                         continue
                     jpg = buf.tobytes()
-                    # Descartar frame viejo si la queue está llena
-                    if self._frame_queue.full():
-                        try:
-                            self._frame_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                    self._frame_queue.put_nowait(jpg)
+
+                    # Siempre actualizar ultimo_jpg para el MJPEG (sin límite de tiempo)
+                    self.ultimo_jpg = jpg
+
+                    # Solo enviar a la queue de análisis cada INTERVALO_SEG
+                    ahora = time.monotonic()
+                    if ahora - ultimo_analisis >= INTERVALO_SEG:
+                        ultimo_analisis = ahora
+                        if self._frame_queue.full():
+                            try:
+                                self._frame_queue.get_nowait()
+                            except queue.Empty:
+                                pass
+                        self._frame_queue.put_nowait(jpg)
+
                 except Exception as e:
                     log.debug(f"[Cam#{self.id_camara}] Error encode: {e}")
 

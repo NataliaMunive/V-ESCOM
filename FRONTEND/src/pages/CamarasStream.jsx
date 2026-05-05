@@ -29,35 +29,8 @@ const hace = (ts) => {
 
 // ── Visor de snapshot con auto-refresh ──────────────────────────────────────
 function SnapshotViewer({ idCamara, activo }) {
-  const [src, setSrc]         = useState(null)
-  const [cargando, setCargando] = useState(false)
-  const [error, setError]     = useState(false)
-  const intervalRef           = useRef(null)
-
-  const refrescar = () => {
-    setCargando(true)
-    setError(false)
-    const token = localStorage.getItem('vescom_token')
-    const url   = `http://localhost:8000/rtsp/snapshot/${idCamara}?t=${Date.now()}`
-    api.get(`/rtsp/snapshot/${idCamara}`, { responseType: 'blob' })
-      .then(r => {
-        const blob = URL.createObjectURL(r.data)
-        setSrc(prev => { if (prev) URL.revokeObjectURL(prev); return blob })
-        setError(false)
-      })
-      .catch(() => setError(true))
-      .finally(() => setCargando(false))
-  }
-
-  useEffect(() => {
-    if (!activo) { setSrc(null); return }
-    refrescar()
-    intervalRef.current = setInterval(refrescar, 3000)
-    return () => {
-      clearInterval(intervalRef.current)
-      if (src) URL.revokeObjectURL(src)
-    }
-  }, [activo, idCamara])
+  const token = localStorage.getItem('vescom_token')
+  const mjpegUrl = `http://localhost:8000/rtsp/mjpeg/${idCamara}?token=${token}`
 
   if (!activo) return (
     <div className="snapshot-placeholder">
@@ -68,9 +41,15 @@ function SnapshotViewer({ idCamara, activo }) {
 
   return (
     <div className="snapshot-wrap">
-      {src && <img src={src} alt="Vista de cámara" className="snapshot-img" />}
-      {cargando && !src && <div className="snapshot-loading">Conectando...</div>}
-      {error && <div className="snapshot-error">⚠ Sin señal</div>}
+      <img
+        key={mjpegUrl}
+        src={mjpegUrl}
+        alt="Vista de cámara"
+        className="snapshot-img"
+        onError={(e) => {
+          e.target.style.display = 'none'
+        }}
+      />
       <div className="snapshot-badge">EN VIVO</div>
     </div>
   )

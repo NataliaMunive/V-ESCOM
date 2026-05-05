@@ -322,14 +322,17 @@ async def identificar_rostro(
                 commit=True,
             )
         except Exception as e:
+            import traceback
             db.rollback()
+            log_msg = f"Fallo notificacion: {e}\n{traceback.format_exc()}"
+            print(log_msg)
             registrar_log(
                 db,
                 nivel="ERROR",
                 origen="Motor_IA",
                 tipo="Notificacion",
                 id_evento=evento.id_evento,
-                mensaje=f"Fallo al disparar notificacion de intrusion: {e}",
+                mensaje=log_msg,
                 commit=True,
             )
 
