@@ -103,16 +103,16 @@ export default function Camaras() {
     catch (err) { alert(err.response?.data?.detail || 'Error al desactivar') }
   }
 
-  const activas   = camaras.filter(c => c.activa).length
   const inactivas = camaras.filter(c => !c.activa).length
   const enMonitoreo = Object.values(monitoreando).filter(Boolean).length
+  const sinConexion = camaras.length - enMonitoreo
 
   return (
     <div className="camaras-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Gestión de Cámaras</h1>
-          <p className="page-sub">{camaras.length} cámaras · {enMonitoreo} en monitoreo activo</p>
+          <p className="page-sub">{camaras.length} cámaras · {enMonitoreo} en vivo · {sinConexion} sin conexión</p>
         </div>
         <button className="btn-primary" onClick={abrirCrear}>+ Nueva cámara</button>
       </div>
@@ -123,16 +123,12 @@ export default function Camaras() {
           <span className="cam-stat-label">Total</span>
         </div>
         <div className="cam-stat cam-stat-ok">
-          <span className="cam-stat-val">{activas}</span>
-          <span className="cam-stat-label">Activas</span>
+          <span className="cam-stat-val">{enMonitoreo}</span>
+          <span className="cam-stat-label">En vivo</span>
         </div>
         <div className="cam-stat cam-stat-off">
-          <span className="cam-stat-val">{inactivas}</span>
-          <span className="cam-stat-label">Inactivas</span>
-        </div>
-        <div className="cam-stat" style={{ borderLeft: '3px solid var(--acento)' }}>
-          <span className="cam-stat-val" style={{ color: 'var(--acento)' }}>{enMonitoreo}</span>
-          <span className="cam-stat-label">Monitoreando</span>
+          <span className="cam-stat-val">{sinConexion}</span>
+          <span className="cam-stat-label">Sin conexión</span>
         </div>
       </div>
 
@@ -166,12 +162,12 @@ export default function Camaras() {
       ) : (
         <div className="camaras-grid">
           {camaras.map(c => (
-            <div key={c.id_camara} className={`camara-card ${!c.activa ? 'inactiva' : ''}`}>
+            <div key={c.id_camara} className={`camara-card ${!monitoreando[c.id_camara] ? 'inactiva' : ''}`}>
               <div className="camara-card-header">
                 <div className="camara-icono">◈</div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <span className={`camara-estado ${c.activa ? 'estado-ok' : 'estado-off'}`}>
-                    {c.activa ? '● Activa' : '○ Inactiva'}
+                  <span className={`camara-estado ${monitoreando[c.id_camara] ? 'estado-ok' : 'estado-off'}`}>
+                    {monitoreando[c.id_camara] ? '● Activa' : '○ Apagada'}
                   </span>
                   {monitoreando[c.id_camara] && (
                     <span style={{
@@ -207,7 +203,7 @@ export default function Camaras() {
 
               <div className="camara-acciones" style={{ flexDirection: 'column', gap: 6 }}>
                 {/* Botón Monitorear / Detener */}
-                {c.activa && c.direccion_ip && (
+                {c.direccion_ip && (
                   <button
                     className={`btn-accion ${monitoreando[c.id_camara] ? 'btn-danger' : ''}`}
                     style={{
@@ -239,14 +235,15 @@ export default function Camaras() {
                 )}
 
                 {/* Botones editar / desactivar */}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-accion" style={{ flex: 1 }} onClick={() => abrirEditar(c)}>
-                    ✏️ Editar
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button className="btn-accion" style={{ flex: 1, minHeight: 40 }} onClick={() => abrirEditar(c)}>
+                    <img src="/icons/editar.svg" alt="" style={{ width: 18, height: 18 }} />
+                    Editar
                   </button>
                   {c.activa && (
                     <button
                       className="btn-accion btn-danger"
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, minHeight: 40 }}
                       onClick={() => handleDesactivar(c)}
                     >
                       ⏹ Desactivar

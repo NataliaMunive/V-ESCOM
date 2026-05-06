@@ -54,7 +54,7 @@ def _generar_pdf(eventos: list, filtros: dict) -> bytes:
         fontName="Helvetica-Bold",
         textColor=AZUL_IPN,
         alignment=TA_CENTER,
-        spaceAfter=2,
+        spaceAfter=8,
     )
     estilo_subtitulo = ParagraphStyle(
         "subtitulo",
@@ -63,7 +63,7 @@ def _generar_pdf(eventos: list, filtros: dict) -> bytes:
         fontName="Helvetica",
         textColor=colors.HexColor("#64748b"),
         alignment=TA_CENTER,
-        spaceAfter=6,
+        spaceAfter=10,
     )
     estilo_metadato = ParagraphStyle(
         "metadato",
@@ -93,6 +93,7 @@ def _generar_pdf(eventos: list, filtros: dict) -> bytes:
  
     # Encabezado
     elementos.append(Paragraph("V-ESCOM", estilo_titulo))
+    elementos.append(Spacer(1, 2))
     elementos.append(Paragraph(
         "Sistema de Vigilancia con Reconocimiento Facial · ESCOM-IPN",
         estilo_subtitulo,
@@ -116,7 +117,7 @@ def _generar_pdf(eventos: list, filtros: dict) -> bytes:
     camara = filtros.get("id_camara") or "Todas"
  
     elementos.append(Paragraph(
-        f"Período: <b>{desde}</b> → <b>{hasta}</b>   |   "
+        f"Período: <b>{desde}</b> a <b>{hasta}</b>   |   "
         f"Tipo: <b>{tipo}</b>   |   Cámara: <b>{camara}</b>",
         estilo_metadato,
     ))

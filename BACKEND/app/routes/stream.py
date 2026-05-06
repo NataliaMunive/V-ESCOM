@@ -29,6 +29,27 @@ router = APIRouter(prefix="/stream", tags=["Stream RTSP"])
 _tareas_activas: dict[int, asyncio.Task] = {}
 
 
+def _actualizar_estado_camara(id_camara: int, activa: bool, estado: str) -> None:
+    db = SessionLocal()
+    try:
+        camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
+        if camara is not None:
+            camara.activa = activa
+            camara.estado = estado
+            db.commit()
+    finally:
+        db.close()
+
+
+def detener_stream_activo(id_camara: int) -> bool:
+    tarea = _tareas_activas.pop(id_camara, None)
+    if tarea is None:
+        return False
+    tarea.cancel()
+    _actualizar_estado_camara(id_camara, False, "Apagada")
+    return True
+
+
 # ─── Clase auxiliar para simular UploadFile con bytes de frame ───────────────
 class FrameUpload:
     """
@@ -47,7 +68,7 @@ class FrameUpload:
 async def _capturar_camara(
     id_camara: int,
     url_stream: str,
-    intervalo: float = 3.0,
+    intervalo: float = 1.0,
 ):
     """
     Tarea asyncio que captura frames continuamente desde una cámara IP.
@@ -65,6 +86,7 @@ async def _capturar_camara(
 
     if not cap.isOpened():
         print(f"[Stream #{id_camara}] ✗ No se pudo abrir: {url_stream}")
+        _actualizar_estado_camara(id_camara, False, "Desconectada")
         _tareas_activas.pop(id_camara, None)
         return
 
@@ -185,6 +207,21 @@ async def iniciar_stream(
 
     url_stream = camara.direccion_ip
 
+    # Validar antes de crear la tarea para no dejar la cámara como "activa"
+    # cuando realmente no hay conexión de video.
+    fuente = int(url_stream) if url_stream.isdigit() else url_stream
+    probe = cv2.VideoCapture(fuente)
+    if not probe.isOpened():
+        probe.release()
+        _actualizar_estado_camara(id_camara, False, "Desconectada")
+        raise HTTPException(
+            status_code=422,
+            detail="No se pudo abrir el stream de la cámara. Verifica la conexión o la URL.",
+        )
+    probe.release()
+
+    _actualizar_estado_camara(id_camara, True, "Activa")
+
     # Crear tarea asyncio en background
     tarea = asyncio.create_task(
         _capturar_camara(id_camara, url_stream, intervalo)
@@ -214,8 +251,7 @@ async def detener_stream(
             detail="Esta cámara no está siendo monitoreada actualmente"
         )
 
-    tarea = _tareas_activas.pop(id_camara)
-    tarea.cancel()
+    detener_stream_activo(id_camara)
 
     return {
         "message": f"Monitoreo detenido para cámara #{id_camara}",

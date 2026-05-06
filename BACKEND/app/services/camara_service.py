@@ -39,7 +39,8 @@ def crear_camara(db: Session, camara_data):
         direccion_ip=_normalizar_direccion_ip(camara_data.direccion_ip),
         ubicacion=camara_data.ubicacion,
         id_cubiculo=camara_data.id_cubiculo,
-        estado=camara_data.estado
+        activa=False,
+        estado=camara_data.estado or "Apagada",
     )
 
     db.add(nueva_camara)
@@ -83,5 +84,6 @@ def actualizar_camara(db: Session, id_camara: int, datos):
 def desactivar_camara(db: Session, id_camara: int):
     camara = obtener_camara(db, id_camara)
     camara.activa = False
+    camara.estado = "Inactiva"
     db.commit()
     return camara

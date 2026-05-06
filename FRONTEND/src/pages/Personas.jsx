@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  getPersonas, crearPersona, actualizarPersona,
-  eliminarPersona, subirRostro
+  getPersonas, getPersona, getEventos, crearPersona, actualizarPersona,
+  eliminarPersona, subirRostro, getCubiculos
 } from '../services/api'
 import './Personas.css'
 
@@ -11,7 +11,11 @@ export default function Personas() {
   const [personas, setPersonas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [modal, setModal] = useState(null)       // null | 'crear' | 'editar'
+  const [verModal, setVerModal] = useState(false)
   const [seleccionada, setSeleccionada] = useState(null)
+  const [perfil, setPerfil] = useState(null)
+  const [eventosPerfil, setEventosPerfil] = useState([])
+  const [cargandoPerfil, setCargandoPerfil] = useState(false)
   const [form, setForm] = useState(FORM_VACIO)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -20,6 +24,7 @@ export default function Personas() {
   const fotoRef = useRef()
   const [duplicadoInfo, setDuplicadoInfo] = useState(null)
   const [cubiculos, setCubiculos] = useState([])
+  const fotoPerfil = perfil?.ruta_rostro ? `/${String(perfil.ruta_rostro).replace(/\\/g, '/')}` : null
   useEffect(() => { cargar(); cargarCubiculos() }, [])
 
   const cargar = async () => {
@@ -60,7 +65,29 @@ export default function Personas() {
     setModal('editar')
   }
 
+  const abrirPerfil = async (p) => {
+    setCargandoPerfil(true)
+    setVerModal(true)
+    setPerfil(null)
+    setEventosPerfil([])
+    try {
+      const [perfilRes, eventosRes] = await Promise.all([
+        getPersona(p.id_persona),
+        getEventos({ id_persona: p.id_persona, limit: 20 }),
+      ])
+      setPerfil(perfilRes.data)
+      setEventosPerfil(eventosRes.data || [])
+    } catch (err) {
+      setPerfil(p)
+      setEventosPerfil([])
+      setError(err.response?.data?.detail || 'No se pudo cargar el perfil')
+    } finally {
+      setCargandoPerfil(false)
+    }
+  }
+
   const cerrarModal = () => { setModal(null); setSeleccionada(null); setError('') }
+  const cerrarPerfil = () => { setVerModal(false); setPerfil(null); setEventosPerfil([]); setCargandoPerfil(false) }
 
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }))
 
@@ -156,9 +183,9 @@ const handleForzarRostro = async () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Personas Autorizadas</h1>
-          <p className="page-sub">{personas.length} registros · ESCOM-IPN</p>
+          <p className="page-sub">{personas.length} registros · Profesores, administrativos e investigadores autorizados</p>
         </div>
-        <button className="btn-primary" onClick={abrirCrear}>+ Registrar persona</button>
+        <button className="btn-primary" onClick={abrirCrear}>+ Registrar persona autorizada</button>
       </div>
 
       {/* Buscador */}
@@ -228,6 +255,9 @@ const handleForzarRostro = async () => {
                       <button className="btn-accion" type="button" title="Editar" aria-label="Editar" onClick={() => abrirEditar(p)}>
                         <img src="/icons/editar.svg" alt="" />
                       </button>
+                      <button className="btn-accion" type="button" title="Ver perfil" aria-label="Ver perfil" onClick={() => abrirPerfil(p)}>
+                        <img src="/icons/ver.svg" alt="" />
+                      </button>
                       <button className="btn-accion btn-danger" type="button" title="Eliminar" aria-label="Eliminar" onClick={() => handleEliminar(p)}>
                         <img src="/icons/eliminar.svg" alt="" />
                       </button>
@@ -287,6 +317,7 @@ const handleForzarRostro = async () => {
                     <option value="Administrativo">Administrativo</option>
                     <option value="Investigador">Investigador</option>
                   </select>
+                  
                 </div>
                 <div className="field">
                   <label>Cubículo</label>
@@ -301,7 +332,7 @@ const handleForzarRostro = async () => {
                 </div>
               </div>
 
-              {error && <div className="form-error">⚠ {error}</div>}
+              {error && <div className="form-error"> {error}</div>}
 
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={cerrarModal}>Cancelar</button>
@@ -313,6 +344,74 @@ const handleForzarRostro = async () => {
           </div>
         </div>
       )}
+
+      {verModal && (
+        <div className="modal-overlay" onClick={cerrarPerfil}>
+          <div className="modal modal-perfil" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Persona autorizada</h3>
+              <button className="modal-close" onClick={cerrarPerfil}>✕</button>
+            </div>
+
+            {cargandoPerfil ? (
+              <div className="modal-perfil-loading">Cargando perfil...</div>
+            ) : perfil ? (
+              <div className="perfil-wrap">
+                <div className="perfil-top">
+                  <div className="perfil-foto-card">
+                    {fotoPerfil ? (
+                      <img src={fotoPerfil} alt={`${perfil.nombre} ${perfil.apellidos}`} className="perfil-foto" />
+                    ) : (
+                      <div className="persona-avatar perfil-fallback">{perfil.nombre?.[0]?.toUpperCase()}</div>
+                    )}
+                  </div>
+
+                  <div className="perfil-datos">
+                    <div className="perfil-linea"><span>Nombre:</span> <strong>{perfil.nombre} {perfil.apellidos}</strong></div>
+                    <div className="perfil-linea"><span>Rol:</span> <strong>{perfil.rol}</strong></div>
+                    <div className="perfil-linea"><span>Cubículo:</span> <strong>{perfil.id_cubiculo ?? '—'}</strong></div>
+                    <div className="perfil-linea"><span>Teléfono de contacto:</span> <strong>{perfil.telefono || '—'}</strong></div>
+                    <div className="perfil-linea"><span>Correo institucional:</span> <strong>{perfil.email || '—'}</strong></div>
+                  </div>
+                </div>
+
+                <div className="perfil-section">
+                  <h4>Historial de Accesos</h4>
+                  {eventosPerfil.length === 0 ? (
+                    <div className="perfil-vacio">No hay accesos registrados para esta persona.</div>
+                  ) : (
+                    <div className="perfil-tabla-wrap">
+                      <table className="perfil-tabla">
+                        <thead>
+                          <tr>
+                            <th>Fecha y hora</th>
+                            <th>Evento</th>
+                            <th>Cámara</th>
+                            <th>Cubículo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {eventosPerfil.map((ev) => (
+                            <tr key={ev.id_evento}>
+                              <td>{ev.fecha || '—'} · {ev.hora || '—'}</td>
+                              <td>Persona Autorizada</td>
+                              <td>{ev.id_camara ? `Cámara ${ev.id_camara}` : '—'}</td>
+                              <td>{perfil.id_cubiculo ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="modal-perfil-loading">No se pudo cargar el perfil.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {duplicadoInfo && (
   <div className="modal-overlay" onClick={() => setDuplicadoInfo(null)}>
     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>

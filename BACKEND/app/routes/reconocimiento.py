@@ -159,6 +159,7 @@ async def identificar(
 def listar_eventos(
     tipo: Optional[str] = Query(None, description="Filtrar: 'Autorizado' o 'No Autorizado'"),
     id_camara: Optional[int] = Query(None),
+    id_persona: Optional[int] = Query(None),
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
     _: Administrador = Depends(get_current_admin),
@@ -168,4 +169,6 @@ def listar_eventos(
         query = query.filter(EventoAcceso.tipo_acceso == tipo)
     if id_camara:
         query = query.filter(EventoAcceso.id_camara == id_camara)
+    if id_persona:
+        query = query.filter(EventoAcceso.id_persona == id_persona)
     return query.order_by(EventoAcceso.id_evento.desc()).limit(limit).all()

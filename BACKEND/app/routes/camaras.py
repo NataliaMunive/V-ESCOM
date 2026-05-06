@@ -14,6 +14,7 @@ from app.schemas.camara_schema import CrearCamara, DatosCamara, UpdCamara
 from app.services import camara_service
 from app.core.deps import get_current_admin # Sugerencia: Proteger estas rutas
 from app.models.administrador import Administrador
+from app.routes.stream import detener_stream_activo
 
 router = APIRouter(prefix="/camaras", tags=["Cámaras"])
 
@@ -63,4 +64,5 @@ def desactivar_camara(
     Esto detiene el procesamiento de imágenes de este dispositivo en el motor de IA.
     """
     camara_service.desactivar_camara(db, id_camara)
+    detener_stream_activo(id_camara)
     return {"message": "Cámara desactivada correctamente"}

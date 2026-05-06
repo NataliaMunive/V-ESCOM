@@ -1,4 +1,23 @@
 .cubiculos-page {
+  padding: 36px 40px;
+  display: grid;
+  gap: 20px;
+}
+
+.cubiculos-page .page-header {
+  margin-bottom: 28px;
+  gap: 20px;
+}
+
+.cubiculos-page .page-title {
+  letter-spacing: -0.2px;
+}
+
+.cubiculos-page .page-sub {
+  line-height: 1.45;
+}
+
+.cubiculos-page {
   display: grid;
   gap: 20px;
 }
@@ -7,6 +26,14 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
+}
+
+.cubiculos-page .cub-stats {
+  margin-bottom: 8px;
+}
+
+.cubiculos-page .tabla-wrap {
+  margin-top: 4px;
 }
 
 .cub-stat {
@@ -32,6 +59,48 @@
 .cub-stat-label {
   font-size: 0.82rem;
   color: var(--texto-suave, #94a3b8);
+  line-height: 1.35;
+}
+
+.cubiculos-page .tabla th {
+  letter-spacing: 1px;
+  padding: 14px 18px;
+}
+
+.cubiculos-page .tabla td {
+  padding: 16px 18px;
+}
+
+.cubiculos-page .acciones {
+  gap: 10px;
+}
+
+.cubiculos-page .btn-icono {
+  margin: 0;
+}
+
+.cubiculos-page .btn-icono img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.cubiculos-page .btn-primary,
+.cubiculos-page .btn-secondary {
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.cubiculos-page .modal-header h3 {
+  letter-spacing: 0.2px;
+}
+
+.cubiculos-page .field label {
+  letter-spacing: 1px;
+}
+
+.cubiculos-page .modal-actions {
+  gap: 12px;
 }
 
 .btn-icono img {

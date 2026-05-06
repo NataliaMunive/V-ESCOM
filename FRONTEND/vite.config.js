@@ -15,6 +15,10 @@ export default defineConfig({
         target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
+      },
+      '/fotos_rostros': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       }
     }
   }

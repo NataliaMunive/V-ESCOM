@@ -17,9 +17,24 @@ import cv2
 
 log = logging.getLogger("rtsp_manager")
 
-INTERVALO_SEG  = float(os.getenv("RTSP_INTERVALO_SEG", "3"))
+INTERVALO_SEG  = float(os.getenv("RTSP_INTERVALO_SEG", "1"))
 MAX_REINTENTOS = int(os.getenv("RTSP_REINTENTOS", "5"))
 ESPERA_RETRY   = 8
+
+
+def _actualizar_estado_camara(id_camara: int, activa: bool, estado: str) -> None:
+    from app.bd import SessionLocal
+    from app.models.camara import Camara
+
+    db = SessionLocal()
+    try:
+        camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
+        if camara is not None:
+            camara.activa = activa
+            camara.estado = estado
+            db.commit()
+    finally:
+        db.close()
 
 
 class CameraWorker:
@@ -52,6 +67,7 @@ class CameraWorker:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # type: ignore
 
             if not cap.isOpened():
+                _actualizar_estado_camara(self.id_camara, False, "Desconectada")
                 reintentos += 1
                 log.warning(
                     f"[Cam#{self.id_camara}] No se pudo abrir stream "
@@ -104,6 +120,7 @@ class CameraWorker:
                 time.sleep(ESPERA_RETRY)
 
         self.activo = False
+        _actualizar_estado_camara(self.id_camara, False, "Apagada")
         log.info(f"[Cam#{self.id_camara}] Thread de captura finalizado.")
 
     # ── Task asyncio de análisis (InsightFace) ────────────────────────────────
@@ -213,6 +230,7 @@ class RTSPManager:
         if id_camara in self._workers:
             self._workers[id_camara].detener()
             del self._workers[id_camara]
+            _actualizar_estado_camara(id_camara, False, "Apagada")
 
     def detener_todas(self) -> None:
         for w in self._workers.values():

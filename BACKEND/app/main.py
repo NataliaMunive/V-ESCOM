@@ -9,6 +9,8 @@ Este módulo inicializa la aplicación FastAPI y configura los componentes centr
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas, cubiculos
 from app.routes import reportes
 from app.routes import stream
@@ -48,6 +50,10 @@ app.include_router(reportes.router)
 app.include_router(stream.router)
 app.include_router(rtsp_routes.router)
 rtsp_manager.inicializar(app)  
+
+fotos_path = Path(__file__).resolve().parent.parent / "fotos_rostros"
+app.mount("/fotos_rostros", StaticFiles(directory=str(fotos_path)), name="fotos_rostros")
+
 @app.get("/", tags=["Root"])
 async def root():
     """Endpoint de salud para verificar que la API está operativa."""

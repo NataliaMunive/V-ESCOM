@@ -130,7 +130,7 @@ const exportarReportePDF = async () => {
           <button className="btn-primary" onClick={handleGenerar} disabled={cargando}>
             {cargando ? 'Generando...' : '⊕ Generar reporte'}
           </button>
-          {generado && eventos.length > 0 && (
+          {generado && (
   <button
     className="btn-export"
     style={{ background: 'rgba(230,57,70,0.1)', borderColor: 'rgba(230,57,70,0.3)', color: 'var(--rojo-alerta)' }}
