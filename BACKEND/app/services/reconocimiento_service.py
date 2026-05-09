@@ -262,7 +262,7 @@ async def identificar_rostro(
  
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            nombre_archivo = f"intruso_{timestamp}.jpg"
+            nombre_archivo = f"intruso_ev{evento.id_evento}_{timestamp}.jpg"
             ruta_captura = os.path.join(directorio_intrusos, nombre_archivo)
  
             with open(ruta_captura, "wb") as f:

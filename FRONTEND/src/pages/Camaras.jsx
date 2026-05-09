@@ -15,6 +15,9 @@ export default function Camaras() {
   const [error, setError]               = useState('')
   const [monitoreando, setMonitoreando] = useState({}) // { id_camara: bool }
   const [cargandoStream, setCargandoStream] = useState({}) // { id_camara: bool }
+  const [modalStream, setModalStream] = useState(null) // { camara }
+  const [formStream, setFormStream]   = useState({ rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' })
+  const [mostrarPassStream, setMostrarPassStream] = useState(false)
 
   useEffect(() => {
     cargar()
@@ -38,23 +41,22 @@ export default function Camaras() {
     } catch {}
   }
 
-  const handleIniciarStream = async (c) => {
-    setCargandoStream(s => ({ ...s, [c.id_camara]: true }))
+  const handleIniciarStream = async (credenciales) => {
+    const cam = modalStream
+    setModalStream(null)
+    setCargandoStream(s => ({ ...s, [cam.id_camara]: true }))
     try {
-      const user = prompt('Usuario RTSP (ej: adminadmin):', 'adminadmin')
-      const pass = prompt('Contraseña RTSP:', '')
-      if (user === null) return  // canceló
       await api.post('/rtsp/iniciar', {
-        id_camara: c.id_camara,
-        rtsp_user: user,
-        rtsp_pass: pass,
-        stream: 'stream2',
+        id_camara:  cam.id_camara,
+        rtsp_user:  credenciales.rtsp_user,
+        rtsp_pass:  credenciales.rtsp_pass,
+        stream:     credenciales.stream,
       })
-      setMonitoreando(m => ({ ...m, [c.id_camara]: true }))
+      setMonitoreando(m => ({ ...m, [cam.id_camara]: true }))
     } catch (err) {
-      alert(err.response?.data?.detail || 'No se pudo abrir el stream de la cámara. Verifica la conexión o la URL.')
+      alert(err.response?.data?.detail || 'No se pudo abrir el stream')
     } finally {
-      setCargandoStream(s => ({ ...s, [c.id_camara]: false }))
+      setCargandoStream(s => ({ ...s, [cam.id_camara]: false }))
     }
   }
 
@@ -230,7 +232,7 @@ export default function Camaras() {
                     disabled={cargandoStream[c.id_camara]}
                     onClick={() => monitoreando[c.id_camara]
                       ? handleDetenerStream(c)
-                      : handleIniciarStream(c)
+                      : setModalStream(c)
                     }
                   >
                     {cargandoStream[c.id_camara]
@@ -345,6 +347,103 @@ export default function Camaras() {
           </div>
         </div>
       )}
+      {/* Modal credenciales RTSP */}
+{modalStream && (
+  <div className="modal-overlay" onClick={() => setModalStream(null)}>
+    <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Iniciar stream — {modalStream.nombre}</h3>
+        <button className="modal-close" onClick={() => setModalStream(null)}>✕</button>
+      </div>
+      <div className="modal-form">
+        {modalStream.direccion_ip && (
+          <div style={{
+            background: 'var(--fondo-card2)', border: '1px solid var(--borde)',
+            borderRadius: 8, padding: '10px 14px', marginBottom: 4,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <span style={{ fontSize: 13, color: 'var(--texto)', fontWeight: 600 }}>
+              {modalStream.nombre}
+            </span>
+            <code style={{ fontSize: 12, color: 'var(--acento)', fontFamily: 'var(--fuente-mono)' }}>
+              {modalStream.direccion_ip}:554
+            </code>
+          </div>
+        )}
+
+        <div className="field">
+          <label>Usuario RTSP</label>
+          <input
+            value={formStream.rtsp_user}
+            onChange={e => setFormStream(f => ({ ...f, rtsp_user: e.target.value }))}
+            placeholder="adminadmin"
+          />
+        </div>
+
+        <div className="field">
+          <label>Contraseña RTSP</label>
+          <div className="pass-wrap">
+            <input
+              type={mostrarPassStream ? 'text' : 'password'}
+              value={formStream.rtsp_pass}
+              onChange={e => setFormStream(f => ({ ...f, rtsp_pass: e.target.value }))}
+              placeholder="Contraseña de la camara"
+            />
+            <button type="button" className="pass-toggle"
+              onClick={() => setMostrarPassStream(v => !v)}>
+              {mostrarPassStream ? '🙈' : '👁️'}
+            </button>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Calidad del stream</label>
+          <select
+            value={formStream.stream}
+            onChange={e => setFormStream(f => ({ ...f, stream: e.target.value }))}
+          >
+            <option value="stream2">stream2 — 720p (recomendado)</option>
+            <option value="stream1">stream1 — 2K 3MP</option>
+          </select>
+        </div>
+
+        {/* Preview URL */}
+        {modalStream.direccion_ip && (
+          <div style={{
+            background: 'rgba(0,194,224,0.05)',
+            border: '1px solid rgba(0,194,224,0.15)',
+            borderRadius: 8, padding: '10px 14px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--texto-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 4 }}>
+              URL resultante
+            </div>
+            <code style={{ fontSize: 11, color: 'var(--acento)', wordBreak: 'break-all',
+              fontFamily: 'var(--fuente-mono)' }}>
+              {formStream.rtsp_pass
+                ? `rtsp://${formStream.rtsp_user}:****@${modalStream.direccion_ip}:554/${formStream.stream}`
+                : `rtsp://${modalStream.direccion_ip}:554/${formStream.stream}`
+              }
+            </code>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={() => setModalStream(null)}>
+            Cancelar
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => handleIniciarStream(formStream)}
+            disabled={cargandoStream[modalStream.id_camara]}
+          >
+            {cargandoStream[modalStream.id_camara] ? 'Conectando...' : '▶ Iniciar stream'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }
