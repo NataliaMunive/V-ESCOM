@@ -6,12 +6,13 @@ import './Alertas.css'
 const ESTADOS = ['Todos', 'No Autorizado', 'Autorizado']
 
 export default function Alertas() {
-  const [alertas, setAlertas] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [filtro, setFiltro] = useState('Todos')
-  const [limite, setLimite] = useState(50)
+  const [alertas, setAlertas]               = useState([])
+  const [cargando, setCargando]             = useState(true)
+  const [filtro, setFiltro]                 = useState('Todos')
+  const [limite, setLimite]                 = useState(50)
   const [conexionActiva, setConexionActiva] = useState(false)
-  const [alertaEnVivo, setAlertaEnVivo] = useState(null)
+  const [alertaEnVivo, setAlertaEnVivo]     = useState(null)
+  const [modalImagen, setModalImagen]       = useState(null) // { id_alerta, id_evento }
 
   useEffect(() => { cargar() }, [filtro, limite])
 
@@ -21,28 +22,26 @@ export default function Alertas() {
 
     const ws = conectarAlertasWebSocket({
       token,
-      onOpen: () => setConexionActiva(true),
+      onOpen:  () => setConexionActiva(true),
       onClose: () => setConexionActiva(false),
       onError: () => setConexionActiva(false),
       onMessage: (payload) => {
         if (payload?.type !== 'alerta_nueva' || !payload.data) return
-
         const nueva = payload.data
         setAlertaEnVivo(nueva)
         setAlertas((prev) => {
           const coincideFiltro = filtro === 'Todos' || nueva.tipo_acceso === filtro
           if (!coincideFiltro) return prev
-
-          const sinDuplicado = prev.filter((item) => item.id_alerta !== nueva.id_alerta)
+          const sinDuplicado = prev.filter(item => item.id_alerta !== nueva.id_alerta)
           return [nueva, ...sinDuplicado].slice(0, limite)
         })
-
         window.setTimeout(() => {
-          setAlertaEnVivo((actual) => (actual?.id_alerta === nueva.id_alerta ? null : actual))
+          setAlertaEnVivo(actual =>
+            actual?.id_alerta === nueva.id_alerta ? null : actual
+          )
         }, 5000)
       },
     })
-
     return () => ws.close()
   }, [filtro, limite])
 
@@ -83,7 +82,7 @@ export default function Alertas() {
 
       {alertaEnVivo && (
         <div className="alerta-live-banner">
-          Nueva alerta en vivo: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} en cámara {alertaEnVivo.id_camara ?? '—'}
+          ⚠ Nueva alerta: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} · Cámara {alertaEnVivo.id_camara ?? '—'}
         </div>
       )}
 
@@ -118,7 +117,8 @@ export default function Alertas() {
             </button>
           ))}
         </div>
-        <select className="limite-select" value={limite} onChange={e => setLimite(Number(e.target.value))}>
+        <select className="limite-select" value={limite}
+          onChange={e => setLimite(Number(e.target.value))}>
           <option value={25}>Últimos 25</option>
           <option value={50}>Últimos 50</option>
           <option value={100}>Últimos 100</option>
@@ -135,19 +135,24 @@ export default function Alertas() {
             const nivel    = getNivel(a.similitud)
             const esAlerta = a.tipo_acceso === 'No Autorizado'
             return (
-              <div key={a.id_alerta} className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
+              <div key={a.id_alerta}
+                className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
+
                 <div className={`alerta-icono ${esAlerta ? 'icono-danger' : 'icono-ok'}`}>
                   {esAlerta ? '⚠' : '✓'}
                 </div>
+
                 <div className="alerta-info">
                   <div className="alerta-tipo">{a.tipo_acceso || a.tipo_alerta}</div>
                   <div className="alerta-meta mono">
                     {a.fecha} {a.hora?.slice(0, 8)} · Cámara {a.id_camara ?? '—'} · Evento #{a.id_evento}
                   </div>
                 </div>
+
                 {esAlerta && (
                   <span className={`nivel-badge ${nivel.cls}`}>{nivel.label}</span>
                 )}
+
                 <div className="alerta-sim">
                   {a.similitud != null ? (
                     <>
@@ -161,11 +166,119 @@ export default function Alertas() {
                     </>
                   ) : <span className="mono sim-val">—</span>}
                 </div>
+
+                {/* Botón ver captura — solo intrusos */}
+                {esAlerta && (
+                  <button
+                    className="btn-ver-imagen"
+                    title="Ver captura del intruso"
+                    onClick={() => setModalImagen({
+                      id_alerta: a.id_alerta,
+                      id_evento: a.id_evento,
+                    })}
+                  >
+                    📷
+                  </button>
+                )}
               </div>
             )
           })}
         </div>
       )}
+
+      {/* Modal imagen intruso */}
+      {modalImagen && (
+        <ModalImagen
+          idAlerta={modalImagen.id_alerta}
+          idEvento={modalImagen.id_evento}
+          onCerrar={() => setModalImagen(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Modal de captura del intruso ──────────────────────────────────────────────
+function ModalImagen({ idAlerta, idEvento, onCerrar }) {
+  const [blobUrl, setBlobUrl] = useState(null)
+  const [estado, setEstado]   = useState('cargando')
+
+  useEffect(() => {
+    let url = null
+    const token = localStorage.getItem('vescom_token')
+
+    fetch(`http://localhost:8000/capturas/intruso/alerta/${idAlerta}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('No encontrada')
+        return r.blob()
+      })
+      .then(blob => {
+        url = URL.createObjectURL(blob)
+        setBlobUrl(url)
+        setEstado('ok')
+      })
+      .catch(() => setEstado('error'))
+
+    return () => { if (url) URL.revokeObjectURL(url) }
+  }, [idAlerta])
+
+  return (
+    <div className="modal-overlay" onClick={onCerrar}>
+      <div className="modal-imagen" onClick={e => e.stopPropagation()}>
+
+        <div className="modal-imagen-header">
+          <div className="modal-imagen-titulo">
+            <span style={{ fontSize: 22 }}>📷</span>
+            <div>
+              <h3>Captura del intruso</h3>
+              <p className="modal-imagen-sub">
+                Alerta #{idAlerta} · Evento #{idEvento}
+              </p>
+            </div>
+          </div>
+          <button className="modal-close" onClick={onCerrar}>✕</button>
+        </div>
+
+        <div className="modal-imagen-body">
+          {estado === 'cargando' && (
+            <div className="imagen-loading">
+              <p>Cargando captura...</p>
+            </div>
+          )}
+          {estado === 'error' && (
+            <div className="imagen-error">
+              <span style={{ fontSize: 28 }}>⚠</span>
+              <p>No se encontró imagen para esta alerta.</p>
+              <p style={{ fontSize: 12, color: 'var(--texto-muted)', marginTop: 4 }}>
+                La captura puede no estar disponible o haber sido eliminada.
+              </p>
+            </div>
+          )}
+          {estado === 'ok' && blobUrl && (
+            <img
+              src={blobUrl}
+              alt={`Captura intruso alerta #${idAlerta}`}
+              className="imagen-intruso"
+            />
+          )}
+        </div>
+
+        <div className="modal-imagen-footer">
+          {blobUrl && (
+            <a
+              href={blobUrl}
+              download={`intruso_alerta_${idAlerta}.jpg`}
+              className="btn-descargar"
+            >
+              ↓ Descargar imagen
+            </a>
+          )}
+          <button className="btn-secondary" onClick={onCerrar}>Cerrar</button>
+        </div>
+
+      </div>
     </div>
   )
 }

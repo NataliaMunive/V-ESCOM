@@ -16,6 +16,8 @@ from app.routes import reportes
 from app.routes import stream
 from app.routes import rtsp as rtsp_routes
 from app.services.rtsp_manager import rtsp_manager
+from app.routes import capturas
+
 # ─── Configuracion de la instancia ──────────────────────────────────────────────
 app = FastAPI(
     title="V-ESCOM API",
@@ -49,6 +51,7 @@ app.include_router(ws_alertas.router)
 app.include_router(reportes.router)
 app.include_router(stream.router)
 app.include_router(rtsp_routes.router)
+app.include_router(capturas.router)
 rtsp_manager.inicializar(app)  
 
 fotos_path = Path(__file__).resolve().parent.parent / "fotos_rostros"

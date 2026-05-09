@@ -31,9 +31,9 @@ export default function Camaras() {
   // Consulta al backend qué cámaras están siendo monitoreadas actualmente
   const cargarEstadoStreams = async () => {
     try {
-      const r = await api.get('/stream/activas')
+      const r = await api.get('/rtsp/estado')
       const estado = {}
-      r.data.camaras_activas.forEach(id => { estado[id] = true })
+      r.data.forEach(w => { if (w.activo) estado[w.id_camara] = true })
       setMonitoreando(estado)
     } catch {}
   }
@@ -41,10 +41,18 @@ export default function Camaras() {
   const handleIniciarStream = async (c) => {
     setCargandoStream(s => ({ ...s, [c.id_camara]: true }))
     try {
-      await api.post(`/stream/${c.id_camara}/iniciar?intervalo=3`)
+      const user = prompt('Usuario RTSP (ej: adminadmin):', 'adminadmin')
+      const pass = prompt('Contraseña RTSP:', '')
+      if (user === null) return  // canceló
+      await api.post('/rtsp/iniciar', {
+        id_camara: c.id_camara,
+        rtsp_user: user,
+        rtsp_pass: pass,
+        stream: 'stream2',
+      })
       setMonitoreando(m => ({ ...m, [c.id_camara]: true }))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error al iniciar monitoreo')
+      alert(err.response?.data?.detail || 'No se pudo abrir el stream de la cámara. Verifica la conexión o la URL.')
     } finally {
       setCargandoStream(s => ({ ...s, [c.id_camara]: false }))
     }
@@ -53,7 +61,7 @@ export default function Camaras() {
   const handleDetenerStream = async (c) => {
     setCargandoStream(s => ({ ...s, [c.id_camara]: true }))
     try {
-      await api.post(`/stream/${c.id_camara}/detener`)
+      await api.delete(`/rtsp/detener/${c.id_camara}`)
       setMonitoreando(m => ({ ...m, [c.id_camara]: false }))
     } catch (err) {
       alert(err.response?.data?.detail || 'Error al detener monitoreo')
