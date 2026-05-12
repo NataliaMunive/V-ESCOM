@@ -6,7 +6,7 @@ administradores. Utiliza OAuth2 con Password Flow y Tokens JWT.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -116,11 +116,18 @@ def actualizar_admin(
 def desactivar_admin(
     id_admin: int,
     db: Session = Depends(get_db),
-    _admin: Administrador = Depends(get_current_admin),
+    current_admin: Administrador = Depends(get_current_admin),
 ):
     """
     Realiza un 'Soft Delete' cambiando el estado del administrador a inactivo.
     No elimina el registro de la base de datos para preservar la integridad histórica.
+    Un administrador no puede desactivar su propia cuenta.
     """
+    if current_admin.id_admin == id_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes desactivar tu propia cuenta",
+        )
+
     auth_service.desactivar_admin(db, id_admin)
-    return {"message": "Administrador desactivado correctamente"}
+    return {"message": "Administrador desactivado correctamente"}
