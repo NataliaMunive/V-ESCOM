@@ -12,7 +12,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status
+    const url = err.config?.url || ''
+    const esLogin = url.includes('/auth/login')
+
+    if (status === 401 && !esLogin) {
       localStorage.removeItem('vescom_token')
       window.location.href = '/login'
     }
