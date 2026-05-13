@@ -21,7 +21,7 @@ export default function Administradores() {
   const cargar = async () => {
     setCargando(true)
     try { const r = await getAdmins(); setAdmins(r.data) }
-    catch {}
+    catch { }
     finally { setCargando(false) }
   }
 
@@ -58,7 +58,7 @@ export default function Administradores() {
     catch (err) { alert(err.response?.data?.detail || 'Error al desactivar') }
   }
 
-  const activos   = admins.filter(a => a.activo).length
+  const activos = admins.filter(a => a.activo).length
   const inactivos = admins.filter(a => !a.activo).length
 
   return (
@@ -180,7 +180,7 @@ export default function Administradores() {
                     placeholder="Mínimo 8 caracteres"
                   />
                   <button type="button" className="pass-toggle" onClick={() => setMostrarPass(v => !v)}>
-                    {mostrarPass ? '🙈' : '👁️'}
+                    <img src={mostrarPass ? '/icons/desactivar.svg' : '/icons/ver.svg'} alt={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'} />
                   </button>
                 </div>
               </div>
