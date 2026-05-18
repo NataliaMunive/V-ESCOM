@@ -2,7 +2,7 @@
 Router del módulo de reconocimiento facial.
 Todas las rutas requieren autenticación JWT (admin).
 """
-from typing import List, Optional
+from typing import List, Optional, Union, Dict
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
@@ -153,7 +153,7 @@ async def identificar(
 
 @router.get(
     "/eventos",
-    response_model=List[DatosEvento],
+    response_model=Union[List[DatosEvento], Dict[str, str]],
     summary="Historial de eventos de acceso",
 )
 def listar_eventos(
@@ -171,4 +171,7 @@ def listar_eventos(
         query = query.filter(EventoAcceso.id_camara == id_camara)
     if id_persona:
         query = query.filter(EventoAcceso.id_persona == id_persona)
-    return query.order_by(EventoAcceso.id_evento.desc()).limit(limit).all()
+    eventos = query.order_by(EventoAcceso.id_evento.desc()).limit(limit).all()
+    if not eventos:
+        return {"message": "No hay eventos"}
+    return eventos

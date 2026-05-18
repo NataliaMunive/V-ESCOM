@@ -76,7 +76,9 @@ export default function Personas() {
         getEventos({ id_persona: p.id_persona, limit: 20 }),
       ])
       setPerfil(perfilRes.data)
-      setEventosPerfil(eventosRes.data || [])
+      // Si eventosRes.data es un array, usarlo; si es objeto (mensaje), usar array vacío
+      const eventos = Array.isArray(eventosRes.data) ? eventosRes.data : []
+      setEventosPerfil(eventos)
     } catch (err) {
       setPerfil(p)
       setEventosPerfil([])
