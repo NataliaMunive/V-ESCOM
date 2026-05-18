@@ -82,6 +82,12 @@ def test_U03_rechazo_numero_con_letras():
     assert resultado is None
 
 
+def test_U03_rechazo_numero_de_nueve_digitos():
+    """Número mexicano con menos de 10 dígitos debe retornar None."""
+    resultado = normalizar_telefono_mx("551234567")
+    assert resultado is None
+
+
 # ── VESCOM-PERS-U04 ────────────────────────────────────────────────────────────
 
 @pytest.mark.skipif(not FACE_UTILS_DISPONIBLE, reason="InsightFace no instalado")

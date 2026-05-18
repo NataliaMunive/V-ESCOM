@@ -18,15 +18,50 @@ Manejo de errores:
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.administrador import Administrador
 from app.schemas.auth_schema import CrearAdmin, UpdAdmin
 from app.services.log_sistema_service import registrar_log
+from app.utils.phone_utils import normalizar_telefono_mx
 
 MAX_INTENTOS = 3
 BLOQUEO_MINUTOS = 5
+
+
+def _normalizar_email(email: str | None) -> str | None:
+    if email is None:
+        return None
+    email = email.strip().lower()
+    return email or None
+
+
+def _normalizar_telefono(telefono: str | None) -> str | None:
+    return normalizar_telefono_mx(telefono)
+
+
+def _buscar_conflicto_admin(
+    db: Session,
+    *,
+    email: str | None,
+    telefono: str | None,
+    excluir_id_admin: int | None = None,
+) -> tuple[str | None, Administrador | None]:
+    query = db.query(Administrador)
+    if excluir_id_admin is not None:
+        query = query.filter(Administrador.id_admin != excluir_id_admin)
+
+    for admin in query.all():
+        email_admin = _normalizar_email(admin.email)
+        if email and email_admin == email:
+            return "correo", admin
+
+        if telefono and _normalizar_telefono(admin.telefono) == telefono:
+            return "telefono", admin
+
+    return None, None
 
 
 # ─── Login ────────────────────────────────────────────────────────────────────
@@ -36,8 +71,9 @@ def login(db: Session, email: str, contrasena: str) -> str:
     Autentica un administrador.
     Retorna el JWT de acceso o lanza HTTPException.
     """
+    email_norm = _normalizar_email(email)
     admin = db.query(Administrador).filter(
-        Administrador.email == email
+        func.lower(Administrador.email) == email_norm
     ).first()
 
     # No revelar si el correo existe o no (seguridad)
@@ -152,17 +188,27 @@ def login(db: Session, email: str, contrasena: str) -> str:
 # ─── CRUD Administrador ───────────────────────────────────────────────────────
 
 def crear_admin(db: Session, datos: CrearAdmin) -> Administrador:
-    existente = db.query(Administrador).filter(
-        Administrador.email == datos.email
-    ).first()
-    if existente:
+    email_norm = _normalizar_email(datos.email)
+    telefono_norm = _normalizar_telefono(datos.telefono)
+
+    if datos.telefono and telefono_norm is None:
+        raise HTTPException(status_code=422, detail="El teléfono no es válido")
+
+    conflicto, _ = _buscar_conflicto_admin(
+        db,
+        email=email_norm,
+        telefono=telefono_norm,
+    )
+    if conflicto == "correo":
         raise HTTPException(status_code=409, detail="El correo ya está registrado")
+    if conflicto == "telefono":
+        raise HTTPException(status_code=409, detail="El teléfono ya está registrado")
 
     nuevo = Administrador(
         nombre=datos.nombre,
         apellidos=datos.apellidos,
-        email=datos.email,
-        telefono=datos.telefono,
+        email=email_norm,
+        telefono=telefono_norm,
         contrasena=hash_password(datos.contrasena),
     )
     db.add(nuevo)
@@ -187,6 +233,27 @@ def obtener_admins(db: Session):
 def actualizar_admin(db: Session, id_admin: int, datos: UpdAdmin) -> Administrador:
     admin = obtener_admin(db, id_admin)
     update_data = datos.model_dump(exclude_unset=True)
+
+    if "email" in update_data and update_data["email"] is not None:
+        update_data["email"] = _normalizar_email(update_data["email"])
+
+    if "telefono" in update_data:
+        telefono_norm = _normalizar_telefono(update_data["telefono"])
+        if update_data["telefono"] and telefono_norm is None:
+            raise HTTPException(status_code=422, detail="El teléfono no es válido")
+        update_data["telefono"] = telefono_norm
+
+    conflicto, _ = _buscar_conflicto_admin(
+        db,
+        email=update_data.get("email"),
+        telefono=update_data.get("telefono"),
+        excluir_id_admin=id_admin,
+    )
+    if conflicto == "correo":
+        raise HTTPException(status_code=409, detail="El correo ya está registrado")
+    if conflicto == "telefono":
+        raise HTTPException(status_code=409, detail="El teléfono ya está registrado")
+
     if "contrasena" in update_data:
         update_data["contrasena"] = hash_password(update_data["contrasena"])
     for key, value in update_data.items():

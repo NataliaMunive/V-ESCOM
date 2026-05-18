@@ -11,6 +11,7 @@ export default function Alertas() {
   const [filtro, setFiltro]                 = useState('Todos')
   const [limite, setLimite]                 = useState(50)
   const [conexionActiva, setConexionActiva] = useState(false)
+  const [wsMensaje, setWsMensaje]           = useState('')
   const [alertaEnVivo, setAlertaEnVivo]     = useState(null)
   const [modalImagen, setModalImagen]       = useState(null) // { id_alerta, id_evento }
 
@@ -22,9 +23,23 @@ export default function Alertas() {
 
     const ws = conectarAlertasWebSocket({
       token,
-      onOpen:  () => setConexionActiva(true),
-      onClose: () => setConexionActiva(false),
-      onError: () => setConexionActiva(false),
+      onOpen:  () => {
+        setConexionActiva(true)
+        setWsMensaje('')
+      },
+      onClose: (event) => {
+        setConexionActiva(false)
+        if (event?.code === 1008) {
+          const detalle = event?.reason || 'Sesión inválida o sin permisos.'
+          setWsMensaje(`Conexión de alertas cerrada: ${detalle}`)
+        } else {
+          setWsMensaje('Conexión de alertas interrumpida. Revisa el backend o tu sesión.')
+        }
+      },
+      onError: () => {
+        setConexionActiva(false)
+        setWsMensaje('No fue posible mantener el canal de alertas en vivo.')
+      },
       onMessage: (payload) => {
         if (payload?.type !== 'alerta_nueva' || !payload.data) return
         const nueva = payload.data
@@ -79,6 +94,12 @@ export default function Alertas() {
           {conexionActiva ? 'En vivo' : 'Sin conexión en vivo'}
         </div>
       </div>
+
+        {wsMensaje && (
+          <div className="alerta-ws-banner">
+            {wsMensaje}
+          </div>
+        )}
 
       {alertaEnVivo && (
         <div className="alerta-live-banner">

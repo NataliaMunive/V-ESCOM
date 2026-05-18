@@ -37,6 +37,17 @@
   font-weight: 600;
 }
 
+.alerta-ws-banner {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(230,57,70,0.22);
+  background: rgba(230,57,70,0.08);
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .al-stats {
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 14px; margin-bottom: 24px;

@@ -27,8 +27,74 @@ Manejo de Errores:
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.persona_autorizada import PersonaAutorizada
 from app.models.profesor import Profesor
 from app.utils.phone_utils import normalizar_telefono_mx
+
+
+def _nombre_persona_desde_profesor(nombre: str) -> tuple[str, str]:
+    partes = nombre.strip().split(None, 1)
+    if len(partes) == 1:
+        return partes[0], ''
+    return partes[0], partes[1]
+
+
+def _buscar_persona_sincronizada(
+    db: Session,
+    *,
+    correo: str | None = None,
+    telefono: str | None = None,
+) -> PersonaAutorizada | None:
+    query = db.query(PersonaAutorizada).filter(PersonaAutorizada.rol == 'Profesor')
+    if correo:
+        persona = query.filter(PersonaAutorizada.email == correo).first()
+        if persona is not None:
+            return persona
+    if telefono:
+        telefono_norm = normalizar_telefono_mx(telefono)
+        if telefono_norm:
+            persona = query.filter(PersonaAutorizada.telefono == telefono_norm).first()
+            if persona is not None:
+                return persona
+    return None
+
+
+def _sincronizar_persona_desde_profesor(db: Session, profesor: Profesor) -> None:
+    persona = _buscar_persona_sincronizada(
+        db,
+        correo=profesor.correo,
+        telefono=profesor.telefono,
+    )
+
+    if persona is None:
+        persona = PersonaAutorizada(
+            nombre=profesor.nombre,
+            apellidos='',
+            email=profesor.correo,
+            telefono=normalizar_telefono_mx(profesor.telefono),
+            id_cubiculo=profesor.id_cubiculo,
+            rol='Profesor',
+        )
+        db.add(persona)
+        return
+
+    persona.nombre = profesor.nombre
+    persona.email = profesor.correo
+    persona.telefono = normalizar_telefono_mx(profesor.telefono)
+    persona.id_cubiculo = profesor.id_cubiculo
+    persona.rol = 'Profesor'
+    if not persona.apellidos:
+        persona.apellidos = ''
+
+
+def _desactivar_persona_sincronizada(db: Session, profesor: Profesor) -> None:
+    persona = _buscar_persona_sincronizada(
+        db,
+        correo=profesor.correo,
+        telefono=profesor.telefono,
+    )
+    if persona is not None:
+        db.delete(persona)
 
 # ─── CRUD Profesores ────────────────────────────────────────────────────────────────
 # crear profesor
@@ -62,6 +128,8 @@ def crear_profesor(db: Session, profesor_data):
     db.add(nuevo_profesor)
     db.commit()
     db.refresh(nuevo_profesor)
+    _sincronizar_persona_desde_profesor(db, nuevo_profesor)
+    db.commit()
 
     return nuevo_profesor
 
@@ -114,6 +182,8 @@ def actualizar_profesor(db: Session, id_profesor: int, datos):
 
     db.commit()
     db.refresh(profesor)
+    _sincronizar_persona_desde_profesor(db, profesor)
+    db.commit()
 
     return profesor
 
@@ -121,5 +191,6 @@ def actualizar_profesor(db: Session, id_profesor: int, datos):
 def desactivar_profesor(db: Session, id_profesor: int):
     profesor = obtener_profesor(db, id_profesor)
     profesor.activo = False
+    _desactivar_persona_sincronizada(db, profesor)
     db.commit()
     return profesor

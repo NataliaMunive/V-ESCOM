@@ -15,6 +15,7 @@ import os
 from typing import List, Set, Tuple
 
 from sqlalchemy.orm import Session
+from app.models.persona_autorizada import PersonaAutorizada
 
 from app.models.administrador import Administrador
 from app.models.alerta import Alerta
@@ -71,20 +72,21 @@ def _obtener_destinatarios_intrusion(db: Session) -> List[Tuple[str, str]]:
 # obtenemos profesores activos del cubiculo con telefono valido
 def _obtener_destinatarios_cubiculo(db: Session, id_cubiculo: int) -> List[Tuple[str, str]]:
     """Obtiene profesores activos del cubiculo con telefono valido."""
-    profesores = (
-        db.query(Profesor)
-        .filter(Profesor.id_cubiculo == id_cubiculo)
-        .filter(Profesor.activo.is_(True))
-        .filter(Profesor.telefono.isnot(None))
+    # Obtener desde personas_autorizadas con rol 'Profesor'
+    personas = (
+        db.query(PersonaAutorizada)
+        .filter(PersonaAutorizada.rol == 'Profesor')
+        .filter(PersonaAutorizada.telefono.isnot(None))
+        .filter(PersonaAutorizada.id_cubiculo == id_cubiculo)
         .all()
     )
 
-    # Normalizamos teléfonos y preparamos lista de destinatarios (nombre, telefono)
     destinatarios: List[Tuple[str, str]] = []
-    for profesor in profesores:
-        telefono = normalizar_telefono_mx(profesor.telefono)
+    for p in personas:
+        telefono = normalizar_telefono_mx(p.telefono)
         if telefono:
-            destinatarios.append((f"Prof. {profesor.nombre}".strip(), telefono))
+            nombre = f"Prof. {p.nombre} {p.apellidos or ''}".strip()
+            destinatarios.append((nombre, telefono))
     return destinatarios
 
 # obtenemos id_cubiculo del evento a partir de la camara 

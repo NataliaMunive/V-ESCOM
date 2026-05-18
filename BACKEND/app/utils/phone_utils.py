@@ -41,8 +41,4 @@ def normalizar_telefono_mx(telefono: str | None) -> str | None:
     if len(solo_digitos) == 13 and solo_digitos.startswith("521"):
         return f"+52{solo_digitos[3:]}"
 
-    telefono_e164 = f"+{solo_digitos}"
-    if re.fullmatch(r"\+[1-9]\d{7,14}", telefono_e164):
-        return telefono_e164
-
     return None

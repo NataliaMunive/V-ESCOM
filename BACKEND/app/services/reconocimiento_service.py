@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.evento import EventoAcceso, PersonaNoAutorizada
 from app.models.persona_autorizada import PersonaAutorizada
+from app.models.profesor import Profesor
 from app.models.rostro_autorizado import RostroAutorizado
 from app.schemas.reconocimiento_schema import (
     CrearPersonaAutorizada,
@@ -37,16 +38,124 @@ from app.services import notificacion_service
 from app.services.log_sistema_service import registrar_log
 from app.services.websocket_manager import alertas_ws_manager
 from app.utils.face_utils import extraer_embedding
+from app.utils.phone_utils import normalizar_telefono_mx
 
 SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+
+
+def _nombre_completo(persona: PersonaAutorizada) -> str:
+    return f"{persona.nombre} {persona.apellidos or ''}".strip()
+
+
+def _buscar_profesor_sincronizado(
+    db: Session,
+    *,
+    correo: str | None = None,
+    telefono: str | None = None,
+) -> Profesor | None:
+    query = db.query(Profesor)
+    if correo:
+        profesor = query.filter(Profesor.correo == correo).first()
+        if profesor is not None:
+            return profesor
+    if telefono:
+        telefono_norm = normalizar_telefono_mx(telefono)
+        if telefono_norm:
+            profesor = query.filter(Profesor.telefono == telefono_norm).first()
+            if profesor is not None:
+                return profesor
+    return None
+
+
+def _sincronizar_profesor_desde_persona(db: Session, persona: PersonaAutorizada) -> None:
+    if (persona.rol or '').strip().lower() != 'profesor':
+        return
+
+    correo = (persona.email or '').strip() or None
+    telefono = normalizar_telefono_mx(persona.telefono)
+    profesor = _buscar_profesor_sincronizado(db, correo=correo, telefono=telefono)
+
+    if profesor is None:
+        if correo is None:
+            return
+        profesor = Profesor(
+            nombre=_nombre_completo(persona),
+            correo=correo,
+            telefono=telefono,
+            id_cubiculo=persona.id_cubiculo,
+            activo=True,
+        )
+        db.add(profesor)
+        return
+
+    profesor.nombre = _nombre_completo(persona)
+    if correo is not None:
+        profesor.correo = correo
+    if telefono is not None:
+        profesor.telefono = telefono
+    profesor.id_cubiculo = persona.id_cubiculo
+    profesor.activo = True
+
+
+def _desactivar_profesor_sincronizado(db: Session, persona: PersonaAutorizada) -> None:
+    profesor = _buscar_profesor_sincronizado(
+        db,
+        correo=persona.email,
+        telefono=persona.telefono,
+    )
+    if profesor is not None:
+        profesor.activo = False
+
+
+def _buscar_persona_profesor_sincronizada(
+    db: Session,
+    *,
+    correo: str | None = None,
+    telefono: str | None = None,
+) -> PersonaAutorizada | None:
+    query = db.query(PersonaAutorizada).filter(PersonaAutorizada.rol == 'Profesor')
+    if correo:
+        persona = query.filter(PersonaAutorizada.email == correo).first()
+        if persona is not None:
+            return persona
+    if telefono:
+        telefono_norm = normalizar_telefono_mx(telefono)
+        if telefono_norm:
+            persona = query.filter(PersonaAutorizada.telefono == telefono_norm).first()
+            if persona is not None:
+                return persona
+    return None
 
 # ─── CRUD Personas Autorizadas ────────────────────────────────────────────────
 
 def crear_persona(db: Session, datos: CrearPersonaAutorizada) -> PersonaAutorizada:
-    nueva = PersonaAutorizada(**datos.model_dump())
+    datos_dict = datos.model_dump()
+    # Normalizar email y telefono para evitar discrepancias de formato
+    if datos_dict.get('email'):
+        datos_dict['email'] = datos_dict['email'].strip().lower()
+    if datos_dict.get('telefono'):
+        datos_dict['telefono'] = normalizar_telefono_mx(datos_dict['telefono'])
+    if (datos_dict.get('rol') or '').strip().lower() == 'profesor':
+        existente = _buscar_persona_profesor_sincronizada(
+            db,
+            correo=datos_dict.get('email'),
+            telefono=datos_dict.get('telefono'),
+        )
+        if existente is not None:
+            for key, value in datos_dict.items():
+                setattr(existente, key, value)
+            db.commit()
+            db.refresh(existente)
+            _sincronizar_profesor_desde_persona(db, existente)
+            db.commit()
+            return existente
+
+    nueva = PersonaAutorizada(**datos_dict)
     db.add(nueva)
     db.commit()
     db.refresh(nueva)
+    _sincronizar_profesor_desde_persona(db, nueva)
+    db.commit()
     return nueva
 
 # Obtener todas las personas autorizadas o por ID
@@ -67,15 +176,28 @@ def actualizar_persona(
     db: Session, id_persona: int, datos: UpdPersonaAutorizada
 ) -> PersonaAutorizada:
     persona = obtener_persona(db, id_persona)
-    for key, value in datos.model_dump(exclude_unset=True).items():
+    rol_anterior = (persona.rol or '').strip().lower()
+    updates = datos.model_dump(exclude_unset=True)
+    if updates.get('email'):
+        updates['email'] = updates['email'].strip().lower()
+    if updates.get('telefono'):
+        updates['telefono'] = normalizar_telefono_mx(updates['telefono'])
+    for key, value in updates.items():
         setattr(persona, key, value)
     db.commit()
     db.refresh(persona)
+    rol_actual = (persona.rol or '').strip().lower()
+    if rol_actual == 'profesor':
+        _sincronizar_profesor_desde_persona(db, persona)
+    elif rol_anterior == 'profesor' and rol_actual != 'profesor':
+        _desactivar_profesor_sincronizado(db, persona)
+    db.commit()
     return persona
 
 # Eliminar persona autorizada por ID (borrado físico)
 def eliminar_persona(db: Session, id_persona: int) -> None:
     persona = obtener_persona(db, id_persona)
+    _desactivar_profesor_sincronizado(db, persona)
     db.delete(persona)
     db.commit()
 
