@@ -21,7 +21,7 @@ export default function Dashboard() {
         getEventos({ limit: 10 }),
         getCamaras()
       ])
-      const evs = evRes.data
+      const evs = Array.isArray(evRes.data) ? evRes.data : []
       setEventos(evs)
       setCamaras(camRes.data)
       setStats({
@@ -185,7 +185,7 @@ export default function Dashboard() {
             {eventos.length === 0 && (
               <p className="empty-msg">Sin eventos registrados</p>
             )}
-            {eventos.map(ev => (
+            {(Array.isArray(eventos) ? eventos : []).map(ev => (
               <div key={ev.id_evento} className="evento-row">
                 <span className={`evento-badge ${ev.tipo_acceso === 'Autorizado' ? 'badge-ok' : 'badge-alerta'}`}>
                   {ev.tipo_acceso === 'Autorizado' ? '✓' : '⚠'}

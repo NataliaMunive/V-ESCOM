@@ -18,27 +18,28 @@ export default function Eventos() {
       const params = { limit: limite }
       if (filtro !== 'Todos') params.tipo = filtro
       const res = await getEventos(params)
-      setEventos(res.data)
+      setEventos(Array.isArray(res.data) ? res.data : [])
     } catch {}
     finally { setCargando(false) }
   }
 
-  const totalAuth = eventos.filter(e => e.tipo_acceso === 'Autorizado').length
-  const totalNoAuth = eventos.filter(e => e.tipo_acceso === 'No Autorizado').length
+  const eventosLista = Array.isArray(eventos) ? eventos : []
+  const totalAuth = eventosLista.filter(e => e.tipo_acceso === 'Autorizado').length
+  const totalNoAuth = eventosLista.filter(e => e.tipo_acceso === 'No Autorizado').length
 
   return (
     <div className="eventos-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Historial de Eventos</h1>
-          <p className="page-sub">{eventos.length} eventos · últimos registros</p>
+          <p className="page-sub">{eventosLista.length} eventos · últimos registros</p>
         </div>
       </div>
 
       {/* Stats rápidas */}
       <div className="ev-stats">
         <div className="ev-stat">
-          <span className="ev-stat-val">{eventos.length}</span>
+          <span className="ev-stat-val">{eventosLista.length}</span>
           <span className="ev-stat-label">Total</span>
         </div>
         <div className="ev-stat ev-stat-ok">
@@ -51,8 +52,8 @@ export default function Eventos() {
         </div>
         <div className="ev-stat">
           <span className="ev-stat-val">
-            {eventos.length > 0
-              ? `${((totalAuth / eventos.length) * 100).toFixed(0)}%`
+            {eventosLista.length > 0
+              ? `${((totalAuth / eventosLista.length) * 100).toFixed(0)}%`
               : '—'}
           </span>
           <span className="ev-stat-label">Tasa de acceso</span>
@@ -88,7 +89,7 @@ export default function Eventos() {
       <div className="tabla-wrap">
         {cargando ? (
           <div className="tabla-cargando">Cargando eventos...</div>
-        ) : eventos.length === 0 ? (
+        ) : eventosLista.length === 0 ? (
           <div className="tabla-vacia">No hay eventos con este filtro</div>
         ) : (
           <table className="tabla">
@@ -104,7 +105,7 @@ export default function Eventos() {
               </tr>
             </thead>
             <tbody>
-              {eventos.map(ev => (
+              {eventosLista.map(ev => (
                 <tr key={ev.id_evento}>
                   <td className="mono td-muted">#{ev.id_evento}</td>
                   <td>

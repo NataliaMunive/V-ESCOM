@@ -31,7 +31,6 @@ from app.models.persona_autorizada import PersonaAutorizada
 from app.models.profesor import Profesor
 from app.utils.phone_utils import normalizar_telefono_mx
 
-
 def _nombre_persona_desde_profesor(nombre: str) -> tuple[str, str]:
     partes = nombre.strip().split(None, 1)
     if len(partes) == 1:

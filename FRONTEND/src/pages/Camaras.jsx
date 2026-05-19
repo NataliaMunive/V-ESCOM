@@ -19,6 +19,19 @@ export default function Camaras() {
   const [formStream, setFormStream]   = useState({ rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' })
   const [mostrarPassStream, setMostrarPassStream] = useState(false)
 
+  const normalizarError = (detail, fallback) => {
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      return detail
+        .map(item => item?.msg || item?.message || JSON.stringify(item))
+        .join(' | ')
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.msg || detail.message || JSON.stringify(detail)
+    }
+    return fallback
+  }
+
   useEffect(() => {
     cargar()
     cargarEstadoStreams()
@@ -54,7 +67,7 @@ export default function Camaras() {
       })
       setMonitoreando(m => ({ ...m, [cam.id_camara]: true }))
     } catch (err) {
-      alert(err.response?.data?.detail || 'No se pudo abrir el stream')
+      alert(normalizarError(err.response?.data?.detail, 'No se pudo abrir el stream'))
     } finally {
       setCargandoStream(s => ({ ...s, [cam.id_camara]: false }))
     }
@@ -66,7 +79,7 @@ export default function Camaras() {
       await api.delete(`/rtsp/detener/${c.id_camara}`)
       setMonitoreando(m => ({ ...m, [c.id_camara]: false }))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error al detener monitoreo')
+      alert(normalizarError(err.response?.data?.detail, 'Error al detener monitoreo'))
     } finally {
       setCargandoStream(s => ({ ...s, [c.id_camara]: false }))
     }
@@ -103,14 +116,14 @@ export default function Camaras() {
       if (modal === 'crear') await crearCamara(payload)
       else await actualizarCamara(seleccionada.id_camara, payload)
       cerrar(); cargar()
-    } catch (err) { setError(err.response?.data?.detail || 'Error al guardar') }
+    } catch (err) { setError(normalizarError(err.response?.data?.detail, 'Error al guardar')) }
     finally { setGuardando(false) }
   }
 
   const handleDesactivar = async (c) => {
     if (!confirm(`¿Desactivar la cámara "${c.nombre}"?`)) return
     try { await desactivarCamara(c.id_camara); cargar() }
-    catch (err) { alert(err.response?.data?.detail || 'Error al desactivar') }
+    catch (err) { alert(normalizarError(err.response?.data?.detail, 'Error al desactivar')) }
   }
 
   const inactivas = camaras.filter(c => !c.activa).length
