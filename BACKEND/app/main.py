@@ -7,9 +7,11 @@ Este módulo inicializa la aplicación FastAPI y configura los componentes centr
 - Documentación automática de la vigilancia de cubículos.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pathlib import Path
 from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas, cubiculos
 from app.routes import reportes
@@ -56,6 +58,48 @@ rtsp_manager.inicializar(app)
 
 fotos_path = Path(__file__).resolve().parent.parent / "fotos_rostros"
 app.mount("/fotos_rostros", StaticFiles(directory=str(fotos_path)), name="fotos_rostros")
+
+
+def _traducir_error_validacion(error: dict) -> str:
+    tipo = error.get("type", "")
+    campo = " -> ".join(str(p) for p in error.get("loc", [])[1:])
+    detalle = error.get("msg", "")
+    contexto = error.get("ctx") or {}
+
+    if tipo == "missing":
+        return f"El campo {campo} es obligatorio"
+
+    if tipo == "value_error" and "email address" in str(contexto.get("reason", detalle)).lower():
+        return f"El campo {campo} debe ser un correo electrónico válido"
+
+    if tipo.startswith("string_too_short"):
+        return f"El campo {campo} es demasiado corto"
+
+    if tipo.startswith("string_too_long"):
+        return f"El campo {campo} es demasiado largo"
+
+    if tipo.startswith("int_parsing") or tipo.startswith("int_type"):
+        return f"El campo {campo} debe ser un número entero"
+
+    if tipo.startswith("bool_parsing") or tipo.startswith("bool_type"):
+        return f"El campo {campo} debe ser un valor booleano"
+
+    if campo:
+        return f"Error de validación en el campo {campo}"
+
+    return "Error de validación en la solicitud"
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errores = [
+        {
+            **error,
+            "msg": _traducir_error_validacion(error),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errores})
 
 @app.get("/", tags=["Root"])
 async def root():
