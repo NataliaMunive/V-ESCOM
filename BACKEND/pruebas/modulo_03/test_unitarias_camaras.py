@@ -16,10 +16,12 @@ import sys
 import os
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from app.routes.stream import FrameUpload, _tareas_activas, detener_stream_activo
+from app.services.rtsp_manager import construir_rtsp_url, resolver_rtsp_url_camara
 
 
 # ── VESCOM-CAM-U01 ─────────────────────────────────────────────────────────────
@@ -46,6 +48,56 @@ def test_U01_parseo_ip_local_permanece_cadena():
     fuente = int(url_stream) if url_stream.isdigit() else url_stream
     assert fuente == url_stream
     assert isinstance(fuente, str)
+
+
+def test_U01_construir_rtsp_url_escapa_credenciales_especiales():
+    """Los caracteres reservados en usuario y contraseña deben codificarse."""
+    url = construir_rtsp_url(
+        "192.168.1.50",
+        user="admin@vescom",
+        pwd="Vescoma023!",
+        stream="stream1",
+    )
+    assert url == "rtsp://admin%40vescom:Vescoma023%21@192.168.1.50:554/stream1"
+
+
+def test_U01_resolver_rtsp_url_prioriza_url_especifica_por_camara(monkeypatch):
+    """Si existe RTSP_URL_<id>, debe ganar sobre usuario, contraseña y stream."""
+    camara = SimpleNamespace(direccion_ip="192.168.1.60")
+    monkeypatch.setenv("RTSP_URL_4", "rtsp://admin:pass@192.168.1.60:554/stream2")
+    monkeypatch.setenv("RTSP_USER", "otro")
+    monkeypatch.setenv("RTSP_PASS", "otra")
+    monkeypatch.setenv("RTSP_STREAM", "stream1")
+
+    url = resolver_rtsp_url_camara(camara, 4, user="manual", pwd="manual", stream="stream1")
+
+    assert url == "rtsp://admin:pass@192.168.1.60:554/stream2"
+
+
+def test_U01_resolver_rtsp_url_usa_credenciales_por_camara(monkeypatch):
+    """Las credenciales específicas de la cámara deben prevalecer sobre las globales."""
+    camara = SimpleNamespace(direccion_ip="192.168.1.61")
+    monkeypatch.delenv("RTSP_URL_4", raising=False)
+    monkeypatch.setenv("RTSP_USER_4", "camara4")
+    monkeypatch.setenv("RTSP_PASS_4", "clave:camara@4")
+    monkeypatch.setenv("RTSP_STREAM_4", "stream1")
+    monkeypatch.setenv("RTSP_USER", "global")
+    monkeypatch.setenv("RTSP_PASS", "global")
+    monkeypatch.setenv("RTSP_STREAM", "stream2")
+
+    url = resolver_rtsp_url_camara(camara, 4)
+
+    assert url == "rtsp://camara4:clave%3Acamara%404@192.168.1.61:554/stream1"
+
+
+def test_U01_resolver_rtsp_url_respeta_url_directa_en_bd(monkeypatch):
+    """Si la cámara ya guarda una URL directa, no debe reconstruirse."""
+    camara = SimpleNamespace(direccion_ip="rtsp://usuario:pass@192.168.1.70:554/stream2")
+    monkeypatch.setenv("RTSP_URL_4", "rtsp://admin:pass@192.168.1.60:554/stream2")
+
+    url = resolver_rtsp_url_camara(camara, 4, user="otro", pwd="otra", stream="stream1")
+
+    assert url == "rtsp://usuario:pass@192.168.1.70:554/stream2"
 
 
 # ── VESCOM-CAM-U02 ─────────────────────────────────────────────────────────────

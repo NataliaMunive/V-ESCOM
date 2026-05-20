@@ -6,7 +6,7 @@ Maneja la información resultante de la comparación de rostros y la
 trazabilidad de los eventos de seguridad detectados por las cámaras.
 """
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime, date, time
 
@@ -23,6 +23,8 @@ class CrearPersonaAutorizada(BaseModel):
 
 class DatosPersonaAutorizada(BaseModel):
     """Información completa del perfil autorizado, incluyendo estado biométrico."""
+    model_config = ConfigDict(from_attributes=True)
+
     id_persona: int
     nombre: str
     apellidos: str
@@ -34,9 +36,6 @@ class DatosPersonaAutorizada(BaseModel):
     # Indica si ya existe un vector (embedding) generado para esta persona
     tiene_embedding: bool = False
     fecha_registro: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 class UpdPersonaAutorizada(BaseModel):
     """Campos editables para el perfil de una persona autorizada."""
@@ -69,6 +68,8 @@ class ResultadoReconocimiento(BaseModel):
 
 class DatosEvento(BaseModel):
     """Representación de un registro histórico en la bitácora de accesos."""
+    model_config = ConfigDict(from_attributes=True)
+
     id_evento: int
     id_camara: Optional[int] = None
     id_persona: Optional[int] = None
@@ -77,6 +78,3 @@ class DatosEvento(BaseModel):
     hora: Optional[time] = None
     # Métrica de certeza con la que se registró el evento
     similitud: Optional[float] = None
-
-    class Config:
-        from_attributes = True

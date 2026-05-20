@@ -15,7 +15,7 @@ from app.core.deps import get_current_admin
 from app.core.security import decode_access_token
 from app.models.administrador import Administrador
 from app.models.camara import Camara
-from app.services.rtsp_manager import rtsp_manager
+from app.services.rtsp_manager import rtsp_manager, resolver_rtsp_url_camara
 from pydantic import BaseModel
 
 log = logging.getLogger("rtsp_routes")
@@ -30,22 +30,6 @@ class IniciarStreamPayload(BaseModel):
     stream: Optional[str] = "stream2"
 
 
-def _resolver_rtsp_url(id_camara: int, db: Session,
-                        user: str = "adminadmin", pwd: str = "",
-                        stream: str = "stream2") -> str:
-    worker = rtsp_manager._workers.get(id_camara)
-    if worker and worker.activo:
-        return worker.rtsp_url
-    camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
-    if not camara or not camara.direccion_ip:
-        raise HTTPException(status_code=404, detail="Cámara no encontrada o sin IP")
-    env_user = os.getenv("RTSP_USER", user)
-    env_pwd  = os.getenv("RTSP_PASS", pwd)
-    if env_pwd:
-        return f"rtsp://{env_user}:{env_pwd}@{camara.direccion_ip}:554/{stream}"
-    return f"rtsp://{camara.direccion_ip}:554/{stream}"
-
-
 @router.post("/iniciar")
 async def iniciar_stream(
     payload: IniciarStreamPayload,
@@ -58,13 +42,13 @@ async def iniciar_stream(
         if not camara:
             raise HTTPException(status_code=404, detail="Cámara no encontrada")
         if not camara.direccion_ip:
-            raise HTTPException(status_code=422, detail="La cámara no tiene IP configurada.")
-        user = payload.rtsp_user or "adminadmin"
-        pwd  = payload.rtsp_pass or ""
-        rtsp_url = (
-            f"rtsp://{user}:{pwd}@{camara.direccion_ip}:554/{payload.stream}"
-            if pwd else
-            f"rtsp://{camara.direccion_ip}:554/{payload.stream}"
+            raise HTTPException(status_code=422, detail="La cámara no tiene IP o URL configurada.")
+        rtsp_url = resolver_rtsp_url_camara(
+            camara,
+            payload.id_camara,
+            user=payload.rtsp_user,
+            pwd=payload.rtsp_pass,
+            stream=payload.stream,
         )
     log.info(f"URL RTSP que se usará: {rtsp_url}")
     from app.core.security import create_access_token
@@ -97,7 +81,16 @@ async def snapshot(
         return Response(content=worker.ultimo_jpg, media_type="image/jpeg")
 
     # Fallback: capturar directamente
-    rtsp_url = _resolver_rtsp_url(id_camara, db)
+    worker = rtsp_manager._workers.get(id_camara)
+    if worker and worker.activo:
+        rtsp_url = worker.rtsp_url
+    else:
+        camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
+        if not camara:
+            raise HTTPException(status_code=404, detail="Cámara no encontrada")
+        if not camara.direccion_ip:
+            raise HTTPException(status_code=422, detail="La cámara no tiene IP o URL configurada.")
+        rtsp_url = resolver_rtsp_url_camara(camara, id_camara)
 
     def _capturar() -> bytes:
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")

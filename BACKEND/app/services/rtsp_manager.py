@@ -12,6 +12,7 @@ import queue
 import threading
 import time
 from typing import Dict, Optional
+from urllib.parse import quote
 
 import cv2
 
@@ -20,6 +21,83 @@ log = logging.getLogger("rtsp_manager")
 INTERVALO_SEG  = float(os.getenv("RTSP_INTERVALO_SEG", "1"))
 MAX_REINTENTOS = int(os.getenv("RTSP_REINTENTOS", "5"))
 ESPERA_RETRY   = 8
+
+
+def _primer_valor_no_vacio(*valores: Optional[str], default: str = "") -> str:
+    for valor in valores:
+        if valor is None:
+            continue
+        texto = str(valor).strip()
+        if texto:
+            return texto
+    return default
+
+
+def _es_fuente_directa(valor: str) -> bool:
+    valor = valor.strip().lower()
+    return valor.startswith(("rtsp://", "rtsps://", "http://", "https://")) or valor == "0"
+
+
+def construir_rtsp_url(
+    fuente: str,
+    user: Optional[str] = None,
+    pwd: Optional[str] = None,
+    stream: str = "stream2",
+) -> str:
+    fuente = str(fuente).strip()
+    if _es_fuente_directa(fuente):
+        return fuente
+
+    usuario = _primer_valor_no_vacio(user)
+    contrasena = _primer_valor_no_vacio(pwd)
+
+    if usuario and contrasena:
+        return (
+            f"rtsp://{quote(usuario, safe='')}:{quote(contrasena, safe='')}"
+            f"@{fuente}:554/{stream}"
+        )
+
+    return f"rtsp://{fuente}:554/{stream}"
+
+
+def resolver_rtsp_url_camara(
+    camara,
+    id_camara: int,
+    user: Optional[str] = None,
+    pwd: Optional[str] = None,
+    stream: Optional[str] = None,
+) -> str:
+    fuente = getattr(camara, "direccion_ip", None)
+    if not fuente:
+        raise ValueError("La cámara no tiene IP o URL configurada.")
+
+    fuente = str(fuente).strip()
+    if _es_fuente_directa(fuente):
+        return fuente
+
+    url_especifica = _primer_valor_no_vacio(os.getenv(f"RTSP_URL_{id_camara}"))
+    if url_especifica:
+        return url_especifica
+
+    usuario_final = _primer_valor_no_vacio(
+        user,
+        os.getenv(f"RTSP_USER_{id_camara}"),
+        os.getenv("RTSP_USER"),
+        "adminadmin",
+    )
+    contrasena_final = _primer_valor_no_vacio(
+        pwd,
+        os.getenv(f"RTSP_PASS_{id_camara}"),
+        os.getenv("RTSP_PASS"),
+    )
+    stream_final = _primer_valor_no_vacio(
+        stream,
+        os.getenv(f"RTSP_STREAM_{id_camara}"),
+        os.getenv("RTSP_STREAM"),
+        "stream2",
+    )
+
+    return construir_rtsp_url(fuente, usuario_final, contrasena_final, stream_final)
 
 
 def _actualizar_estado_camara(id_camara: int, activa: bool, estado: str) -> None:
@@ -265,6 +343,10 @@ class RTSPManager:
         from app.core.security import create_access_token
         from app.models.administrador import Administrador
 
+        def _es_fuente_directa(valor: str) -> bool:
+            valor = valor.strip().lower()
+            return valor.startswith(("rtsp://", "rtsps://", "http://", "https://")) or valor == "0"
+
         db = SessionLocal()
         try:
             admin = db.query(Administrador).filter(
@@ -283,15 +365,7 @@ class RTSPManager:
             )
 
             for cam in camaras:
-                rtsp_url = os.getenv(f"RTSP_URL_{cam.id_camara}")
-                if not rtsp_url and cam.direccion_ip:
-                    user = os.getenv("RTSP_USER", "admin")
-                    pwd  = os.getenv("RTSP_PASS", "")
-                    rtsp_url = (
-                        f"rtsp://{user}:{pwd}@{cam.direccion_ip}:554/stream2"
-                        if pwd else
-                        f"rtsp://{cam.direccion_ip}:554/stream2"
-                    )
+                rtsp_url = resolver_rtsp_url_camara(cam, cam.id_camara)
                 if rtsp_url:
                     log.info(
                         f"Auto-arrancando cámara #{cam.id_camara} → {rtsp_url}"

@@ -4,6 +4,32 @@ import api from '../services/api'
 import './Camaras.css'
 
 const FORM_VACIO = { nombre: '', direccion_ip: '', ubicacion: '', id_cubiculo: '', activa: true }
+const FORM_STREAM_VACIO = { rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' }
+
+const claveFormStream = (idCamara) => `vescom_rtsp_form_${idCamara}`
+
+const leerFormStream = (idCamara) => {
+  if (!idCamara) return FORM_STREAM_VACIO
+
+  try {
+    const guardado = localStorage.getItem(claveFormStream(idCamara))
+    if (!guardado) return FORM_STREAM_VACIO
+
+    const parsed = JSON.parse(guardado)
+    return {
+      rtsp_user: parsed?.rtsp_user || FORM_STREAM_VACIO.rtsp_user,
+      rtsp_pass: parsed?.rtsp_pass || '',
+      stream: parsed?.stream || FORM_STREAM_VACIO.stream,
+    }
+  } catch {
+    return FORM_STREAM_VACIO
+  }
+}
+
+const guardarFormStream = (idCamara, form) => {
+  if (!idCamara) return
+  localStorage.setItem(claveFormStream(idCamara), JSON.stringify(form))
+}
 
 export default function Camaras() {
   const [camaras, setCamaras]           = useState([])
@@ -16,7 +42,7 @@ export default function Camaras() {
   const [monitoreando, setMonitoreando] = useState({}) // { id_camara: bool }
   const [cargandoStream, setCargandoStream] = useState({}) // { id_camara: bool }
   const [modalStream, setModalStream] = useState(null) // { camara }
-  const [formStream, setFormStream]   = useState({ rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' })
+  const [formStream, setFormStream]   = useState(FORM_STREAM_VACIO)
   const [mostrarPassStream, setMostrarPassStream] = useState(false)
 
   const normalizarError = (detail, fallback) => {
@@ -59,8 +85,13 @@ export default function Camaras() {
     setModalStream(null)
     setCargandoStream(s => ({ ...s, [cam.id_camara]: true }))
     try {
+      const fuente = cam.direccion_ip || ''
+      const rtspUrl = fuente.startsWith('rtsp://') || fuente.startsWith('rtsps://') || fuente.startsWith('http://') || fuente.startsWith('https://') || fuente === '0'
+        ? fuente
+        : null
       await api.post('/rtsp/iniciar', {
         id_camara:  cam.id_camara,
+        rtsp_url:   rtspUrl,
         rtsp_user:  credenciales.rtsp_user,
         rtsp_pass:  credenciales.rtsp_pass,
         stream:     credenciales.stream,
@@ -71,6 +102,23 @@ export default function Camaras() {
     } finally {
       setCargandoStream(s => ({ ...s, [cam.id_camara]: false }))
     }
+  }
+
+  const abrirModalStream = (camara) => {
+    setModalStream(camara)
+    setMostrarPassStream(false)
+    setFormStream(leerFormStream(camara.id_camara))
+    setError('')
+  }
+
+  const actualizarFormStream = (campo, valor) => {
+    setFormStream(prev => {
+      const siguiente = { ...prev, [campo]: valor }
+      if (modalStream?.id_camara) {
+        guardarFormStream(modalStream.id_camara, siguiente)
+      }
+      return siguiente
+    })
   }
 
   const handleDetenerStream = async (c) => {
@@ -245,7 +293,7 @@ export default function Camaras() {
                     disabled={cargandoStream[c.id_camara]}
                     onClick={() => monitoreando[c.id_camara]
                       ? handleDetenerStream(c)
-                      : setModalStream(c)
+                      : abrirModalStream(c)
                     }
                   >
                     {cargandoStream[c.id_camara]
@@ -300,15 +348,15 @@ export default function Camaras() {
               </div>
 
               <div className="field">
-                <label>URL / Dirección IP del stream *</label>
+                <label>URL RTSP / dirección del stream *</label>
                 <input
                   name="direccion_ip"
                   value={form.direccion_ip}
                   onChange={handleChange}
-                  placeholder="rtsp://192.168.1.100:554/stream  ó  0 para webcam"
+                  placeholder="rtsp://admin:pass@192.168.1.100:554/stream2  ó  0 para webcam"
                 />
                 <span style={{ fontSize: 11, color: 'var(--texto-muted)', marginTop: 4 }}>
-                  Ejemplos: rtsp://admin:pass@192.168.1.10:554/stream · http://IP/video.mjpg · 0 (webcam local)
+                  Ejemplos: rtsp://admin:pass@192.168.1.10:554/stream2 · http://IP/video.mjpg · 0 (webcam local)
                 </span>
               </div>
 
@@ -388,7 +436,7 @@ export default function Camaras() {
           <label>Usuario RTSP</label>
           <input
             value={formStream.rtsp_user}
-            onChange={e => setFormStream(f => ({ ...f, rtsp_user: e.target.value }))}
+            onChange={e => actualizarFormStream('rtsp_user', e.target.value)}
             placeholder="adminadmin"
           />
         </div>
@@ -399,7 +447,7 @@ export default function Camaras() {
             <input
               type={mostrarPassStream ? 'text' : 'password'}
               value={formStream.rtsp_pass}
-              onChange={e => setFormStream(f => ({ ...f, rtsp_pass: e.target.value }))}
+              onChange={e => actualizarFormStream('rtsp_pass', e.target.value)}
               placeholder="Contraseña de la camara"
             />
             <button type="button" className="pass-toggle"
@@ -413,7 +461,7 @@ export default function Camaras() {
           <label>Calidad del stream</label>
           <select
             value={formStream.stream}
-            onChange={e => setFormStream(f => ({ ...f, stream: e.target.value }))}
+            onChange={e => actualizarFormStream('stream', e.target.value)}
           >
             <option value="stream2">stream2 — 720p (recomendado)</option>
             <option value="stream1">stream1 — 2K 3MP</option>
@@ -433,10 +481,15 @@ export default function Camaras() {
             </div>
             <code style={{ fontSize: 11, color: 'var(--acento)', wordBreak: 'break-all',
               fontFamily: 'var(--fuente-mono)' }}>
-              {formStream.rtsp_pass
-                ? `rtsp://${formStream.rtsp_user}:****@${modalStream.direccion_ip}:554/${formStream.stream}`
-                : `rtsp://${modalStream.direccion_ip}:554/${formStream.stream}`
-              }
+              {(() => {
+                const fuente = modalStream.direccion_ip || ''
+                if (fuente.startsWith('rtsp://') || fuente.startsWith('rtsps://') || fuente.startsWith('http://') || fuente.startsWith('https://') || fuente === '0') {
+                  return fuente
+                }
+                return formStream.rtsp_pass
+                  ? `rtsp://${formStream.rtsp_user}:****@${fuente}:554/${formStream.stream}`
+                  : `rtsp://${fuente}:554/${formStream.stream}`
+              })()}
             </code>
           </div>
         )}

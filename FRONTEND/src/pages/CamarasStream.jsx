@@ -235,7 +235,14 @@ export default function CamarasStream() {
                 return cam ? (
                   <div className="modal-cam-info">
                     <span className="mci-nombre">{cam.nombre}</span>
-                    {cam.direccion_ip && <code className="mci-ip">{cam.direccion_ip}:554</code>}
+                    {cam.direccion_ip && (
+                      <code className="mci-ip">
+                        {cam.direccion_ip.startsWith('rtsp://') || cam.direccion_ip.startsWith('rtsps://') || cam.direccion_ip.startsWith('http://') || cam.direccion_ip.startsWith('https://') || cam.direccion_ip === '0'
+                          ? cam.direccion_ip
+                          : `${cam.direccion_ip}:554`
+                        }
+                      </code>
+                    )}
                   </div>
                 ) : null
               })()}
@@ -269,9 +276,12 @@ export default function CamarasStream() {
               {(() => {
                 const cam = camaras.find(c => c.id_camara === modal)
                 if (!cam?.direccion_ip) return null
-                const u = form.rtsp_pass
-                  ? `rtsp://${form.rtsp_user}:****@${cam.direccion_ip}:554/${form.stream}`
-                  : `rtsp://${cam.direccion_ip}:554/${form.stream}`
+                const fuente = cam.direccion_ip
+                const u = fuente.startsWith('rtsp://') || fuente.startsWith('rtsps://') || fuente.startsWith('http://') || fuente.startsWith('https://') || fuente === '0'
+                  ? fuente
+                  : form.rtsp_pass
+                    ? `rtsp://${form.rtsp_user}:****@${fuente}:554/${form.stream}`
+                    : `rtsp://${fuente}:554/${form.stream}`
                 return (
                   <div className="url-preview">
                     <span className="url-preview-label">URL resultante</span>
