@@ -195,7 +195,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(2px);
   z-index: 200;
   display: flex;
   align-items: center;
@@ -277,16 +277,16 @@
   max-width: 920px;
 }
 
+/* Limitar altura del modal de perfil y permitir scroll interno para historial */
+.modal.modal-perfil { max-height: 85vh; overflow: hidden; }
+.perfil-wrap { padding: 18px 24px 24px; display: grid; gap: 18px; max-height: calc(85vh - 96px); overflow: auto; }
+.perfil-tabla-wrap { border: 1px solid var(--borde); border-radius: 10px; overflow: hidden; max-height: 48vh; overflow-y: auto; }
+.perfil-tabla { width: 100%; border-collapse: collapse; }
+
 .modal-perfil-loading {
   padding: 28px 24px;
   color: var(--texto-suave);
   text-align: center;
-}
-
-.perfil-wrap {
-  padding: 18px 24px 24px;
-  display: grid;
-  gap: 18px;
 }
 
 .perfil-top {
@@ -353,12 +353,6 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--texto);
-}
-
-.perfil-tabla-wrap {
-  border: 1px solid var(--borde);
-  border-radius: 10px;
-  overflow: hidden;
 }
 
 .perfil-tabla {

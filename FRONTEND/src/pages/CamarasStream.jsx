@@ -260,8 +260,9 @@ export default function CamarasStream() {
                     onChange={e => setForm(f => ({ ...f, rtsp_pass: e.target.value }))}
                     placeholder="Contraseña de la app MERCUSYS" />
                   <button type="button" className="pass-toggle"
-                    onClick={() => setMostrarPass(v => !v)}>
-                    {mostrarPass ? '🙈' : '👁️'}
+                    onClick={() => setMostrarPass(v => !v)}
+                    aria-label={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                    <img src={mostrarPass ? '/icons/desactivar.svg' : '/icons/ver.svg'} alt={mostrarPass ? 'Ocultar' : 'Mostrar'} />
                   </button>
                 </div>
               </div>

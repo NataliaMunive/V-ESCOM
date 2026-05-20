@@ -133,12 +133,7 @@
 }
 
 /* ── Modal ───────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(5px); z-index: 300;
-  display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.2s ease;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 300; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s ease; }
 .modal {
   background: var(--fondo-card); border: 1px solid var(--borde);
   border-radius: 14px; width: 100%; max-width: 480px;
@@ -194,10 +189,9 @@
 
 .pass-wrap { position: relative; display: flex; }
 .pass-wrap input { flex: 1; padding-right: 42px; }
-.pass-toggle {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  background: none; border: none; cursor: pointer; font-size: 16px;
-}
+.pass-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 6px; display:flex; align-items:center; justify-content:center; color: var(--texto-muted); }
+.pass-toggle img { display:block; width:18px; height:18px }
+.pass-wrap input:focus { background: var(--fondo); }
 
 /* URL preview */
 .url-preview {

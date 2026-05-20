@@ -451,8 +451,13 @@ export default function Camaras() {
               placeholder="Contraseña de la camara"
             />
             <button type="button" className="pass-toggle"
-              onClick={() => setMostrarPassStream(v => !v)}>
-              {mostrarPassStream ? '🙈' : '👁️'}
+              onClick={() => setMostrarPassStream(v => !v)}
+              aria-label={mostrarPassStream ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+              {mostrarPassStream ? (
+                <img src="/icons/desactivar.svg" alt="Ocultar" />
+              ) : (
+                <img src="/icons/ver.svg" alt="Mostrar" />
+              )}
             </button>
           </div>
         </div>
