@@ -21,7 +21,19 @@ python-multipart
 
 # ── Reconocimiento facial ─────────────────────────────────────────────────────
 insightface
+# ONNX Runtime: by default the CPU package is used. If you have an NVIDIA GPU
+# and a compatible CUDA toolkit installed, consider installing the GPU build
+# instead of the CPU package. Do NOT install both at the same time.
+# Example (choose a version that matches your CUDA installation):
+#   pip uninstall -y onnxruntime
+#   pip install onnxruntime-gpu==1.24.4
+# Official compatibility matrix: https://onnxruntime.ai/docs/build/eps.html#cuda
 onnxruntime
+# Alternative for Windows + AMD GPUs: use DirectML provider (DirectX)
+# Install the DirectML build (supports many AMD/NVIDIA/Intel GPUs on Windows):
+#   pip install onnxruntime-directml
+# Note: requires up-to-date GPU drivers and DirectX/DirectML support on Windows.
+onnxruntime-directml
 opencv-python-headless
 numpy
 

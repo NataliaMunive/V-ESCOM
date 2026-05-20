@@ -22,6 +22,14 @@ log = logging.getLogger("rtsp_routes")
 router = APIRouter(prefix="/rtsp", tags=["RTSP / Captura Continua"])
 
 
+def _marcar_camara_activa(db: Session, id_camara: int) -> None:
+    camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
+    if camara is not None:
+        camara.activa = True
+        camara.estado = "Activa"
+        db.commit()
+
+
 class IniciarStreamPayload(BaseModel):
     id_camara: int
     rtsp_url: Optional[str] = None
@@ -55,6 +63,7 @@ async def iniciar_stream(
     token = create_access_token({"sub": str(admin.id_admin), "email": admin.email})
     rtsp_manager.set_token(token)
     await rtsp_manager.iniciar_camara(payload.id_camara, rtsp_url)
+    _marcar_camara_activa(db, payload.id_camara)
     return {"mensaje": f"Worker iniciado para cámara #{payload.id_camara}", "rtsp_url": rtsp_url}
 
 

@@ -88,6 +88,17 @@ export default function CamarasStream() {
   }
 
   const workerDe = (id) => workers.find(w => w.id_camara === id)
+  const camarasOrdenadas = [...camaras].sort((a, b) => {
+    const activoA = workerDe(a.id_camara)?.activo === true ? 1 : 0
+    const activoB = workerDe(b.id_camara)?.activo === true ? 1 : 0
+    if (activoA !== activoB) return activoB - activoA
+
+    const habilitadaA = a.activa ? 1 : 0
+    const habilitadaB = b.activa ? 1 : 0
+    if (habilitadaA !== habilitadaB) return habilitadaB - habilitadaA
+
+    return String(a.nombre || '').localeCompare(String(b.nombre || ''))
+  })
 
   const abrirModal = (cam) => {
     setModal(cam.id_camara)
@@ -148,7 +159,7 @@ export default function CamarasStream() {
         <div className="stream-empty">No hay cámaras registradas.</div>
       ) : (
         <div className="stream-grid">
-          {camaras.map(cam => {
+          {camarasOrdenadas.map(cam => {
             const w    = workerDe(cam.id_camara)
             const vivo = w?.activo === true
             const res  = w?.ultimo_resultado

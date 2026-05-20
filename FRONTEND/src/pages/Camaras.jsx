@@ -105,6 +105,10 @@ export default function Camaras() {
   }
 
   const abrirModalStream = (camara) => {
+    if (!camara.activa) {
+      alert('La cámara está inactiva. Actívala antes de iniciar el monitoreo.')
+      return
+    }
     setModalStream(camara)
     setMostrarPassStream(false)
     setFormStream(leerFormStream(camara.id_camara))
@@ -161,6 +165,8 @@ export default function Camaras() {
         ...form,
         id_cubiculo: form.id_cubiculo ? parseInt(form.id_cubiculo) : null
       }
+      // Do not allow changing logical 'activa' from this form — it's controlled elsewhere
+      if (Object.prototype.hasOwnProperty.call(payload, 'activa')) delete payload.activa
       if (modal === 'crear') await crearCamara(payload)
       else await actualizarCamara(seleccionada.id_camara, payload)
       cerrar(); cargar()
@@ -170,9 +176,19 @@ export default function Camaras() {
 
   const handleDesactivar = async (c) => {
     if (!confirm(`¿Desactivar la cámara "${c.nombre}"?`)) return
-    try { await desactivarCamara(c.id_camara); cargar() }
-    catch (err) { alert(normalizarError(err.response?.data?.detail, 'Error al desactivar')) }
+    try {
+      await desactivarCamara(c.id_camara)
+      // Intentar detener también el worker del rtsp_manager (si existe)
+      try { await api.delete(`/rtsp/detener/${c.id_camara}`) } catch (_) {}
+      // Forzar refresco de cámaras y estado de monitoreo para que la UI refleje el cambio
+      setMonitoreando(m => ({ ...m, [c.id_camara]: false }))
+      await cargarEstadoStreams()
+      await cargar()
+    } catch (err) {
+      alert(normalizarError(err.response?.data?.detail, 'Error al desactivar'))
+    }
   }
+
 
   const inactivas = camaras.filter(c => !c.activa).length
   const enMonitoreo = Object.values(monitoreando).filter(Boolean).length
@@ -218,7 +234,7 @@ export default function Camaras() {
           gap: 8,
         }}>
           <span style={{ fontSize: 16 }}>◈</span>
-          {enMonitoreo} cámara{enMonitoreo > 1 ? 's' : ''} procesando frames con ArcFace en tiempo real.
+          {enMonitoreo} cámara{enMonitoreo > 1 ? 's' : ''} procesando frames con ArcFace.
           Las alertas aparecerán automáticamente en la página de Alertas.
         </div>
       )}
@@ -275,34 +291,45 @@ export default function Camaras() {
               <div className="camara-acciones" style={{ flexDirection: 'column', gap: 6 }}>
                 {/* Botón Monitorear / Detener */}
                 {c.direccion_ip && (
-                  <button
-                    className={`btn-accion ${monitoreando[c.id_camara] ? 'btn-danger' : ''}`}
-                    style={{
-                      width: '100%',
-                      fontWeight: 600,
-                      background: monitoreando[c.id_camara]
-                        ? 'rgba(230,57,70,0.1)'
-                        : 'rgba(45,198,83,0.08)',
-                      borderColor: monitoreando[c.id_camara]
-                        ? 'rgba(230,57,70,0.4)'
-                        : 'rgba(45,198,83,0.3)',
-                      color: monitoreando[c.id_camara]
-                        ? 'var(--rojo-alerta)'
-                        : 'var(--verde-ok)',
-                    }}
-                    disabled={cargandoStream[c.id_camara]}
-                    onClick={() => monitoreando[c.id_camara]
-                      ? handleDetenerStream(c)
-                      : abrirModalStream(c)
-                    }
-                  >
-                    {cargandoStream[c.id_camara]
-                      ? '...'
-                      : monitoreando[c.id_camara]
-                        ? '⏹ Detener monitoreo'
-                        : '▶ Iniciar monitoreo'
-                    }
-                  </button>
+                  c.activa ? (
+                    <button
+                      className={`btn-accion ${monitoreando[c.id_camara] ? 'btn-danger' : ''}`}
+                      style={{
+                        width: '100%',
+                        fontWeight: 600,
+                        background: monitoreando[c.id_camara]
+                          ? 'rgba(230,57,70,0.1)'
+                          : 'rgba(45,198,83,0.08)',
+                        borderColor: monitoreando[c.id_camara]
+                          ? 'rgba(230,57,70,0.4)'
+                          : 'rgba(45,198,83,0.3)',
+                        color: monitoreando[c.id_camara]
+                          ? 'var(--rojo-alerta)'
+                          : 'var(--verde-ok)',
+                      }}
+                      disabled={cargandoStream[c.id_camara]}
+                      onClick={() => monitoreando[c.id_camara]
+                        ? handleDetenerStream(c)
+                        : abrirModalStream(c)
+                      }
+                    >
+                      {cargandoStream[c.id_camara]
+                        ? '...'
+                        : monitoreando[c.id_camara]
+                          ? '⏹ Detener monitoreo'
+                          : '▶ Iniciar monitoreo'
+                      }
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-accion"
+                      style={{ width: '100%', fontWeight: 600, opacity: 0.6 }}
+                      disabled
+                      title="La cámara está inactiva"
+                    >
+                      ⚠ Cámara inactiva
+                    </button>
+                  )
                 )}
 
                 {/* Botones editar / desactivar */}
@@ -311,13 +338,28 @@ export default function Camaras() {
                     <img src="/icons/editar.svg" alt="" style={{ width: 18, height: 18 }} />
                     Editar
                   </button>
-                  {c.activa && (
+                  {/** Mostrar siempre el botón para alternar el estado lógico. */}
+                  {c.activa ? (
                     <button
                       className="btn-accion btn-danger"
                       style={{ flex: 1, minHeight: 40 }}
                       onClick={() => handleDesactivar(c)}
                     >
                       ⏹ Desactivar
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-accion"
+                      style={{ flex: 1, minHeight: 40, background: 'rgba(0,194,224,0.08)', borderColor: 'rgba(0,194,224,0.2)', color: 'var(--acento)' }}
+                      onClick={async () => {
+                        if (!confirm(`¿Activar la cámara "${c.nombre}"?`)) return
+                        try {
+                          await actualizarCamara(c.id_camara, { activa: true })
+                          cargar()
+                        } catch (err) { alert(normalizarError(err.response?.data?.detail, 'Error al activar')) }
+                      }}
+                    >
+                      ▶ Activar
                     </button>
                   )}
                 </div>
@@ -380,19 +422,7 @@ export default function Camaras() {
                 />
               </div>
 
-              {modal === 'editar' && (
-                <div className="field field-check">
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      name="activa"
-                      checked={form.activa}
-                      onChange={handleChange}
-                    />
-                    Cámara activa
-                  </label>
-                </div>
-              )}
+              {/* 'Cámara activa' checkbox removed — use the Activate/Deactivate controls instead */}
 
               {error && <div className="form-error">⚠ {error}</div>}
 

@@ -153,3 +153,48 @@ Instalar solo librerías de reconocimiento facial:
 ```powershell
 pip install insightface onnxruntime opencv-python-headless numpy
 ```
+
+### Opción: habilitar aceleración por GPU (ONNX Runtime GPU)
+
+Si dispones de una GPU NVIDIA y quieres acelerar el reconocimiento, instala
+la versión `onnxruntime-gpu` compatible con tu versión de CUDA. Pasos generales:
+
+1. Instala los controladores NVIDIA y el CUDA Toolkit/cuDNN compatibles (consulta
+	la matriz de compatibilidad de ONNX Runtime).
+
+2. Desde el entorno virtual, elimina la versión CPU e instala la GPU:
+```powershell
+pip uninstall -y onnxruntime
+pip install onnxruntime-gpu
+```
+
+3. Verifica proveedores disponibles en Python:
+```python
+import onnxruntime as ort
+print(ort.get_available_providers())
+```
+
+Nota: Si no estás seguro qué versión instalar, consulta:
+https://onnxruntime.ai/docs/build/eps.html#cuda
+
+### Opción AMD en Windows: DirectML (DirectX)
+
+Si tu equipo tiene GPU AMD en Windows, una alternativa a CUDA es usar el
+provider DirectML de ONNX Runtime. Esto funciona en Windows 10/11 con drivers
+actualizados y DirectX12. Pasos generales:
+
+1. Asegúrate de tener los controladores GPU más recientes de AMD y DirectX.
+2. Desde el entorno virtual, instala el paquete DirectML:
+```powershell
+pip install onnxruntime-directml
+```
+3. Verifica los proveedores disponibles:
+```python
+import onnxruntime as ort
+print(ort.get_available_providers())
+```
+
+Si `DmlExecutionProvider` aparece en la lista, InsightFace podrá usar la GPU
+vía DirectML.
+
+

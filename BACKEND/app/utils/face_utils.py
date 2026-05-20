@@ -10,13 +10,40 @@ import numpy as np
 
 try:
     from insightface.app import FaceAnalysis
+    try:
+        import onnxruntime as _ort
+    except Exception:
+        _ort = None
 
     _face_app: Optional[FaceAnalysis] = None
 
     def _get_face_app() -> FaceAnalysis:
+        """Create (singleton) FaceAnalysis and select ONNX provider if available.
+
+        This avoids warnings when a codepath requests CUDA but the runtime is CPU-only.
+        """
         global _face_app
         if _face_app is None:
-            _face_app = FaceAnalysis(name="buffalo_l")
+            providers = None
+            try:
+                if _ort is not None:
+                    available = _ort.get_available_providers()
+                    # Prefer GPU providers if available: CUDA (NVIDIA) or DML (DirectML for AMD/Windows)
+                    if 'CUDAExecutionProvider' in available:
+                        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                    elif 'DmlExecutionProvider' in available or 'DMLExecutionProvider' in available:
+                        # onnxruntime-directml exposes DmlExecutionProvider
+                        providers = ['DmlExecutionProvider', 'CPUExecutionProvider']
+                    else:
+                        providers = ['CPUExecutionProvider']
+            except Exception:
+                providers = None
+
+            if providers:
+                _face_app = FaceAnalysis(name="buffalo_l", providers=providers)
+            else:
+                _face_app = FaceAnalysis(name="buffalo_l")
+
             _face_app.prepare(ctx_id=-1, det_size=(640, 640))
         return _face_app
 
