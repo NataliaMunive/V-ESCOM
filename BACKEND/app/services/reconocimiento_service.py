@@ -19,8 +19,10 @@ Manejo de errores:
 from __future__ import annotations
 
 import os
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
+import numpy as np
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -41,6 +43,135 @@ from app.utils.face_utils import extraer_embedding
 from app.utils.phone_utils import normalizar_telefono_mx
 
 SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+MODOS_IDENTIFICACION = {"auto", "svm", "coseno"}
+
+# Ruta del modelo SVM entrenado (configurable desde .env)
+_RUTA_MODELO_SVM = Path(
+    os.getenv("RUTA_MODELO_SVM", "modelos/clasificador_svm.joblib")
+)
+
+# ─── Gestión del modelo SVM (singleton con recarga) ───────────────────────────
+
+_modelo_svm_cache: dict[str, Any] = {}   # claves: "pipeline", "codificador_etiquetas"
+_modelo_svm_cargado: bool = False
+
+
+def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
+    """Carga el modelo SVM desde disco (singleton).
+
+    Devuelve el artefacto {'pipeline', 'codificador_etiquetas', ...}
+    o None si el archivo no existe todavía.
+
+    Args:
+        forzar_recarga: Si True, descarta la caché y recarga desde disco.
+                        Útil después de un reentrenamiento.
+    """
+    global _modelo_svm_cache, _modelo_svm_cargado
+
+    if forzar_recarga:
+        _modelo_svm_cache = {}
+        _modelo_svm_cargado = False
+
+    if _modelo_svm_cargado:
+        return _modelo_svm_cache if _modelo_svm_cache else None
+
+    _modelo_svm_cargado = True  # marcar aunque falle, para no reintentar en cada request
+
+    if not _RUTA_MODELO_SVM.exists():
+        return None
+
+    try:
+        import joblib
+        artefacto = joblib.load(_RUTA_MODELO_SVM)
+        # Validar que tiene las claves esperadas del nuevo script
+        if "pipeline" in artefacto and "codificador_etiquetas" in artefacto:
+            _modelo_svm_cache = artefacto
+            return _modelo_svm_cache
+        # Compatibilidad con el script antiguo (claves "modelo" y "codificador")
+        if "modelo" in artefacto and "codificador" in artefacto:
+            _modelo_svm_cache = {
+                "pipeline": artefacto["modelo"],
+                "codificador_etiquetas": artefacto["codificador"],
+            }
+            return _modelo_svm_cache
+        return None
+    except Exception as e:
+        print(f"[WARN] No se pudo cargar el modelo SVM: {e}")
+        return None
+
+
+def recargar_modelo_svm() -> bool:
+    """Fuerza la recarga del modelo SVM desde disco.
+
+    Llama esta función después de reentrenar el modelo para que el
+    servicio use la versión actualizada sin reiniciar el servidor.
+
+    Returns:
+        True si el modelo se cargó correctamente, False si no existe.
+    """
+    artefacto = _cargar_modelo_svm(forzar_recarga=True)
+    return artefacto is not None
+
+
+def _identificar_con_svm(
+    embedding: np.ndarray,
+    artefacto: dict[str, Any],
+) -> tuple[int | None, float]:
+    """Identifica un embedding usando el pipeline SVM entrenado.
+
+    Args:
+        embedding : Vector de características (512-d de ArcFace).
+        artefacto : Diccionario con 'pipeline' y 'codificador_etiquetas'.
+
+    Returns:
+        (id_persona, probabilidad_maxima)
+        Si la probabilidad máxima es menor a SIMILITUD_UMBRAL devuelve (None, prob).
+    """
+    pipeline = artefacto["pipeline"]
+    codificador = artefacto["codificador_etiquetas"]
+
+    vector = embedding.reshape(1, -1)   # forma (1, 512)
+
+    # Probabilidades para cada clase
+    probabilidades = pipeline.predict_proba(vector)[0]
+    indice_mejor = int(np.argmax(probabilidades))
+    probabilidad_mejor = float(probabilidades[indice_mejor])
+
+    # Decodificar índice → id_persona original
+    id_persona = int(codificador.inverse_transform([indice_mejor])[0])
+
+    return id_persona, probabilidad_mejor
+
+
+def _identificar_por_coseno(
+    db: Session,
+    embedding_nuevo: np.ndarray,
+) -> tuple[Optional[PersonaAutorizada], float]:
+    """Busca la mejor coincidencia en BD usando distancia coseno.
+
+    Este camino se conserva como modo rápido de prueba y como fallback
+    cuando no hay modelo SVM disponible.
+    """
+    distancia = RostroAutorizado.embedding.cosine_distance(embedding_nuevo.tolist())
+    coincidencia = (
+        db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
+        .join(
+            PersonaAutorizada,
+            PersonaAutorizada.id_persona == RostroAutorizado.id_persona,
+        )
+        .filter(RostroAutorizado.embedding.isnot(None))
+        .order_by(distancia)
+        .first()
+    )
+
+    mejor_similitud = -1.0
+    mejor_persona: Optional[PersonaAutorizada] = None
+
+    if coincidencia:
+        _, mejor_persona, mejor_distancia = coincidencia
+        mejor_similitud = 1.0 - float(mejor_distancia)
+
+    return mejor_persona, mejor_similitud
 
 
 def _nombre_completo(persona: PersonaAutorizada) -> str:
@@ -318,10 +449,22 @@ async def identificar_rostro(
     db: Session,
     imagen: UploadFile,
     id_camara: Optional[int] = None,
+    modo: str = "auto",
 ) -> ResultadoReconocimiento:
     """
-    Compara el rostro de la imagen contra todos los embeddings registrados.
-    Registra el evento en la BD y retorna el resultado.
+    Identifica el rostro de la imagen usando el mejor método disponible:
+
+     1. Modelo SVM entrenado (si existe modelos/clasificador_svm.joblib)
+         → más preciso con múltiples fotos por persona y distintos ángulos.
+     2. Búsqueda por distancia coseno en BD (modo prueba rápida / fallback)
+         → funciona sin necesidad de reentrenamiento previo.
+
+     Parámetro `modo`:
+     - "auto": usa SVM si existe; si no, cae a coseno.
+     - "svm": fuerza el uso del modelo SVM y falla si no existe.
+     - "coseno": fuerza el modo rápido de prueba por distancia coseno.
+
+    En ambos casos registra el evento en la BD y retorna el resultado.
     """
     contenido = await imagen.read()
 
@@ -338,27 +481,59 @@ async def identificar_rostro(
         )
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Buscar la mejor coincidencia entre personas registradas usando pgvector
-    distancia = RostroAutorizado.embedding.cosine_distance(embedding_nuevo.tolist())
-    coincidencia = (
-        db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
-        .join(
-            PersonaAutorizada,
-            PersonaAutorizada.id_persona == RostroAutorizado.id_persona,
+    modo_normalizado = (modo or "auto").strip().lower()
+    if modo_normalizado not in MODOS_IDENTIFICACION:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Modo de identificación inválido. Usa 'auto', 'svm' o 'coseno'."
+            ),
         )
-        .filter(RostroAutorizado.embedding.isnot(None))
-        .order_by(distancia)
-        .first()
-    )
 
     mejor_similitud = -1.0
     mejor_persona: Optional[PersonaAutorizada] = None
+    metodo_usado = "coseno"   # para logging
 
-    if coincidencia:
-        _, mejor_persona, mejor_distancia = coincidencia
-        mejor_similitud = 1.0 - float(mejor_distancia)
+    # ── Intento 1: Modelo SVM entrenado ──────────────────────────────────────
+    artefacto_svm = _cargar_modelo_svm() if modo_normalizado != "coseno" else None
+    if modo_normalizado == "svm" and artefacto_svm is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No hay modelo SVM disponible. Ejecuta el entrenamiento "
+                "o usa modo='coseno' para la prueba rápida."
+            ),
+        )
 
-    # Clasificar
+    if artefacto_svm is not None and modo_normalizado in {"auto", "svm"}:
+        try:
+            id_persona_svm, probabilidad = _identificar_con_svm(embedding_nuevo, artefacto_svm)
+            if probabilidad >= SIMILITUD_UMBRAL:
+                persona_svm = (
+                    db.query(PersonaAutorizada)
+                    .filter(PersonaAutorizada.id_persona == id_persona_svm)
+                    .first()
+                )
+                if persona_svm is not None:
+                    mejor_persona = persona_svm
+                    mejor_similitud = probabilidad
+                    metodo_usado = "svm"
+        except Exception as e_svm:
+            # Si el SVM falla por cualquier razón, caer al coseno
+            registrar_log(
+                db,
+                nivel="WARNING",
+                origen="Motor_IA",
+                tipo="Reconocimiento",
+                mensaje=f"Fallo SVM, usando coseno como fallback: {e_svm}",
+                commit=False,
+            )
+
+    # ── Intento 2: Búsqueda coseno (fallback / modo prueba rápida) ───────────
+    if metodo_usado == "coseno":
+        mejor_persona, mejor_similitud = _identificar_por_coseno(db, embedding_nuevo)
+
+    # ── Clasificar resultado ──────────────────────────────────────────────────
     if mejor_persona and mejor_similitud >= SIMILITUD_UMBRAL:
         tipo_acceso = "Autorizado"
         id_persona = mejor_persona.id_persona
@@ -420,7 +595,8 @@ async def identificar_rostro(
         tipo="Reconocimiento",
         mensaje=(
             f"Evento de acceso generado. tipo={tipo_acceso}, "
-            f"id_persona={id_persona}, camara={id_camara}, similitud={round(mejor_similitud, 4)}"
+            f"id_persona={id_persona}, camara={id_camara}, "
+            f"similitud={round(mejor_similitud, 4)}, metodo={metodo_usado}, modo={modo_normalizado}"
         ),
     )
 

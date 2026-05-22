@@ -129,6 +129,56 @@ async def registrar_rostro(
  
 
 
+# ─── Modelo SVM ───────────────────────────────────────────────────────────────
+
+@router.post(
+    "/modelo/recargar",
+    summary="Recargar modelo SVM tras reentrenamiento",
+)
+def recargar_modelo(
+    _: Administrador = Depends(get_current_admin),
+):
+    """
+    Fuerza la recarga del modelo SVM desde disco sin reiniciar el servidor.
+
+    Llama a este endpoint **después** de ejecutar `entrenar_clasificador.py`
+    para que el servicio use el modelo actualizado de inmediato.
+
+    - Si el modelo existe y se cargó bien → `{"modelo": "svm", "estado": "cargado"}`
+    - Si el archivo no existe aún       → `{"modelo": "coseno", "estado": "sin_modelo"}`
+    """
+    cargado = reconocimiento_service.recargar_modelo_svm()
+    if cargado:
+        return {"modelo": "svm", "estado": "cargado", "ruta": str(reconocimiento_service._RUTA_MODELO_SVM)}
+    return {"modelo": "coseno", "estado": "sin_modelo", "mensaje": "No se encontró el archivo .joblib. Usa el método coseno."}
+
+
+@router.get(
+    "/modelo/estado",
+    summary="Consultar qué método de identificación está activo",
+)
+def estado_modelo(
+    _: Administrador = Depends(get_current_admin),
+):
+    """
+    Informa si el sistema usará el modelo SVM entrenado o la búsqueda coseno.
+    """
+    artefacto = reconocimiento_service._cargar_modelo_svm()
+    if artefacto is not None:
+        num_personas = artefacto.get("num_personas", "?")
+        kernel = artefacto.get("kernel", "?")
+        return {
+            "metodo_activo": "svm",
+            "num_personas": num_personas,
+            "kernel": kernel,
+            "ruta_modelo": str(reconocimiento_service._RUTA_MODELO_SVM),
+        }
+    return {
+        "metodo_activo": "coseno",
+        "mensaje": "No hay modelo SVM cargado. Entrena con entrenar_clasificador.py y llama a /modelo/recargar.",
+    }
+
+
 # ─── Identificación ───────────────────────────────────────────────────────────
 
 @router.post(
@@ -139,14 +189,24 @@ async def registrar_rostro(
 async def identificar(
     imagen: UploadFile = File(..., description="Frame capturado por la cámara"),
     id_camara: Optional[int] = Form(None, description="ID de la cámara que capturó el frame"),
+    modo: str = Query(
+        "auto",
+        description="Modo de identificación: auto, svm o coseno (prueba rápida)",
+    ),
     db: Session = Depends(get_db),
     _: Administrador = Depends(get_current_admin),
 ):
     """
-    Recibe un frame de cámara, extrae el embedding y lo compara
-    con la base de datos. Registra el evento y retorna el resultado.
+    Recibe un frame de cámara, extrae el embedding y lo compara usando:
+    - **Modelo SVM** (si existe `modelos/clasificador_svm.joblib`) → más preciso con múltiples ángulos.
+    - **Distancia coseno** (fallback automático) → modo prueba rápida sin reentrenamiento.
+
+    El parámetro `modo` permite forzar:
+    - `auto`: usa SVM si existe; si no, usa coseno.
+    - `svm`: fuerza el modelo entrenado.
+    - `coseno`: fuerza la prueba rápida por distancia coseno.
     """
-    return await reconocimiento_service.identificar_rostro(db, imagen, id_camara)
+    return await reconocimiento_service.identificar_rostro(db, imagen, id_camara, modo=modo)
 
 
 # ─── Historial de eventos ─────────────────────────────────────────────────────
