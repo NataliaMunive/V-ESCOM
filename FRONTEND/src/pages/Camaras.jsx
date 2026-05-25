@@ -233,7 +233,7 @@ export default function Camaras() {
           alignItems: 'center',
           gap: 8,
         }}>
-          <span style={{ fontSize: 16 }}>◈</span>
+          <img src="/icons/foto.svg" alt="" style={{ width: 18, height: 18, display: 'block' }} />
           {enMonitoreo} cámara{enMonitoreo > 1 ? 's' : ''} procesando frames con ArcFace.
           Las alertas aparecerán automáticamente en la página de Alertas.
         </div>
@@ -251,7 +251,9 @@ export default function Camaras() {
           {camaras.map(c => (
             <div key={c.id_camara} className={`camara-card ${!monitoreando[c.id_camara] ? 'inactiva' : ''}`}>
               <div className="camara-card-header">
-                <div className="camara-icono">◈</div>
+                <div className="camara-icono">
+                  <img src="/icons/foto.svg" alt="" />
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                   <span className={`camara-estado ${monitoreando[c.id_camara] ? 'estado-ok' : 'estado-off'}`}>
                     {monitoreando[c.id_camara] ? '● Activa' : '○ Apagada'}

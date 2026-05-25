@@ -198,7 +198,7 @@ export default function Alertas() {
                       id_evento: a.id_evento,
                     })}
                   >
-                    📷
+                    <img src="/icons/foto.svg" alt="" style={{ width: 18, height: 18, display: 'block' }} />
                   </button>
                 )}
               </div>
@@ -251,7 +251,7 @@ function ModalImagen({ idAlerta, idEvento, onCerrar }) {
 
         <div className="modal-imagen-header">
           <div className="modal-imagen-titulo">
-            <span style={{ fontSize: 22 }}>📷</span>
+            <img src="/icons/foto.svg" alt="" style={{ width: 22, height: 22, display: 'block' }} />
             <div>
               <h3>Captura del intruso</h3>
               <p className="modal-imagen-sub">
