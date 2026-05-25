@@ -110,7 +110,7 @@ export default function Eventos() {
                   <td className="mono td-muted">#{ev.id_evento}</td>
                   <td>
                     <span className={`tipo-badge ${ev.tipo_acceso === 'Autorizado' ? 'tipo-ok' : 'tipo-alerta'}`}>
-                      {ev.tipo_acceso === 'Autorizado' ? '✓' : '⚠'} {ev.tipo_acceso}
+                      <img src={ev.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'} alt="" style={{ width: 14, height: 14, marginRight: 6, verticalAlign: 'middle' }} /> {ev.tipo_acceso}
                     </span>
                   </td>
                   <td className="mono">{ev.fecha || '—'}</td>

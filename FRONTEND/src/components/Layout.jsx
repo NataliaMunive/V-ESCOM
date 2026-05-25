@@ -3,15 +3,15 @@ import { useAuth } from '../context/AuthContext'
 import './Layout.css'
 
 const navItems = [
-  { to: '/dashboard',       label: 'Dashboard',        icon: '◈' },
-  { to: '/cubiculos',       label: 'Cubículos',        icon: '▣' },
-  { to: '/personas',        label: 'Personas',         icon: '◉' },
-  { to: '/camaras',         label: 'Cámaras',          icon: '⊞' },
-  { to: '/alertas',         label: 'Alertas',          icon: '⚠' },
-  { to: '/eventos',         label: 'Eventos',          icon: '◎' },
-  { to: '/reportes',        label: 'Reportes',         icon: '≡' },
-  { to: '/administradores', label: 'Administradores',  icon: '⊛' },
-  { to: '/streams', label: 'Streams', icon: '▶' },
+  { to: '/dashboard',       label: 'Dashboard',        icon: '/icons/dashboard.svg' },
+  { to: '/cubiculos',       label: 'Cubículos',        icon: '/icons/cubiculos.svg' },
+  { to: '/personas',        label: 'Personas',         icon: '/icons/personas.svg' },
+  { to: '/camaras',         label: 'Cámaras',          icon: '/icons/camaras.svg' },
+  { to: '/alertas',         label: 'Alertas',          icon: '/icons/alerta.svg' },
+  { to: '/eventos',         label: 'Eventos',          icon: '/icons/eventos.svg' },
+  { to: '/reportes',        label: 'Reportes',         icon: '/icons/reportes.svg' },
+  { to: '/administradores', label: 'Administradores',  icon: '/icons/administradores.svg' },
+  { to: '/streams', label: 'Streams', icon: '/icons/streams.svg' },
 ]
 
 export default function Layout() {
@@ -38,7 +38,7 @@ export default function Layout() {
               to={item.to}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><img src={item.icon} alt="" style={{ width: 18, height: 18, display: 'block' }} /></span>
               <span className="nav-label">{item.label}</span>
             </NavLink>
           ))}
@@ -55,7 +55,7 @@ export default function Layout() {
             </div>
           </div>
           <button className="btn-logout" onClick={handleLogout} title="Cerrar sesión">
-            ⏻
+            <img src="/icons/power.svg" alt="" style={{ width: 18, height: 18, display: 'block' }} />
           </button>
         </div>
       </aside>

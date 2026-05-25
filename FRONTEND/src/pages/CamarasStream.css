@@ -38,7 +38,8 @@
   border-radius: 10px; padding: 16px 20px;
   margin-bottom: 24px;
 }
-.rtsp-info-icon   { font-size: 22px; margin-top: 2px; flex-shrink: 0; }
+.rtsp-info-icon   { width: 26px; height: 26px; margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.rtsp-info-icon img { width: 26px; height: 26px; display: block; }
 .rtsp-info-titulo { font-size: 13px; font-weight: 600; color: var(--texto); margin-bottom: 6px; }
 .rtsp-info-url    {
   display: block; font-family: var(--fuente-mono); font-size: 12px;

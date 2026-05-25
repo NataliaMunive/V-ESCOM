@@ -76,28 +76,28 @@ export default function Dashboard() {
       {/* ── Stats ── */}
       <div className="stats-grid">
         <div className="stat-card">
-          <span className="stat-icon">◎</span>
+          <span className="stat-icon"><img src="/icons/eventos.svg" alt="" style={{ width: 20, height: 20 }} /></span>
           <div>
             <p className="stat-valor">{stats.total}</p>
             <p className="stat-label">Eventos recientes</p>
           </div>
         </div>
         <div className="stat-card stat-ok">
-          <span className="stat-icon">✓</span>
+          <span className="stat-icon"><img src="/icons/ok.svg" alt="" style={{ width: 20, height: 20 }} /></span>
           <div>
             <p className="stat-valor">{stats.autorizados}</p>
             <p className="stat-label">Autorizados</p>
           </div>
         </div>
         <div className="stat-card stat-alerta">
-          <span className="stat-icon">⚠</span>
+          <span className="stat-icon"><img src="/icons/alerta.svg" alt="" style={{ width: 20, height: 20 }} /></span>
           <div>
             <p className="stat-valor">{stats.no_autorizados}</p>
             <p className="stat-label">No autorizados</p>
           </div>
         </div>
         <div className="stat-card">
-          <span className="stat-icon">◈</span>
+          <span className="stat-icon"><img src="/icons/camaras.svg" alt="" style={{ width: 20, height: 20 }} /></span>
           <div>
             <p className="stat-valor">{camaras.length}</p>
             <p className="stat-label">Cámaras</p>
@@ -122,7 +122,7 @@ export default function Dashboard() {
               <img src={preview} alt="Preview" className="preview-img" />
             ) : (
               <>
-                <div className="drop-icon">⊕</div>
+                <div className="drop-icon"><img src="/icons/add.svg" alt="" style={{ width: 22, height: 22 }} /></div>
                 <p>Clic para subir imagen o frame de cámara</p>
                 <span className="drop-hint">JPEG · PNG · máx. 5MB</span>
               </>
@@ -154,7 +154,11 @@ export default function Dashboard() {
           {resultado && !resultado.error && (
             <div className={`resultado ${resultado.tipo_acceso === 'Autorizado' ? 'resultado-ok' : 'resultado-alerta'}`}>
               <div className="resultado-tipo">
-                {resultado.tipo_acceso === 'Autorizado' ? '✓' : '⚠'}
+                <img
+                  src={resultado.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'}
+                  alt=""
+                  style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}
+                />
                 {resultado.tipo_acceso}
               </div>
               {resultado.nombre && (
@@ -169,7 +173,7 @@ export default function Dashboard() {
 
           {resultado?.error && (
             <div className="resultado resultado-alerta">
-              <div className="resultado-tipo">✕ Error</div>
+              <div className="resultado-tipo"><img src="/icons/close.svg" alt="" style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />Error</div>
               <p>{resultado.error}</p>
             </div>
           )}
@@ -188,7 +192,7 @@ export default function Dashboard() {
             {(Array.isArray(eventos) ? eventos : []).map(ev => (
               <div key={ev.id_evento} className="evento-row">
                 <span className={`evento-badge ${ev.tipo_acceso === 'Autorizado' ? 'badge-ok' : 'badge-alerta'}`}>
-                  {ev.tipo_acceso === 'Autorizado' ? '✓' : '⚠'}
+                  <img src={ev.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'} alt="" style={{ width: 14, height: 14 }} />
                 </span>
                 <div className="evento-info">
                   <span className="evento-tipo">{ev.tipo_acceso}</span>

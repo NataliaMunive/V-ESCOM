@@ -145,7 +145,9 @@ export default function CamarasStream() {
       </div>
 
       <div className="rtsp-info-card">
-        <div className="rtsp-info-icon">📡</div>
+        <div className="rtsp-info-icon">
+          <img src="/icons/red.svg" alt="" />
+        </div>
         <div>
           <p className="rtsp-info-titulo">MERCUSYS MC210 — Formato RTSP</p>
           <code className="rtsp-info-url">

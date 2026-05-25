@@ -103,7 +103,7 @@ export default function Alertas() {
 
       {alertaEnVivo && (
         <div className="alerta-live-banner">
-          ⚠ Nueva alerta: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} · Cámara {alertaEnVivo.id_camara ?? '—'}
+          Nueva alerta: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} · Cámara {alertaEnVivo.id_camara ?? '—'}
         </div>
       )}
 
@@ -160,7 +160,11 @@ export default function Alertas() {
                 className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
 
                 <div className={`alerta-icono ${esAlerta ? 'icono-danger' : 'icono-ok'}`}>
-                  {esAlerta ? '⚠' : '✓'}
+                  <img
+                    src={esAlerta ? '/icons/alerta.svg' : '/icons/ok.svg'}
+                    alt=""
+                    className="alerta-icono-img"
+                  />
                 </div>
 
                 <div className="alerta-info">
@@ -270,7 +274,7 @@ function ModalImagen({ idAlerta, idEvento, onCerrar }) {
           )}
           {estado === 'error' && (
             <div className="imagen-error">
-              <span style={{ fontSize: 28 }}>⚠</span>
+              <span style={{ fontSize: 28, fontWeight: 700 }}>Error</span>
               <p>No se encontró imagen para esta alerta.</p>
               <p style={{ fontSize: 12, color: 'var(--texto-muted)', marginTop: 4 }}>
                 La captura puede no estar disponible o haber sido eliminada.
