@@ -64,6 +64,26 @@ class ResultadoReconocimiento(BaseModel):
     id_evento: int
 
 
+class ResultadoReconocimientoRostro(BaseModel):
+    """Resultado individual al identificar una imagen con varios rostros."""
+    indice_rostro: int
+    bbox: Optional[list[int]] = None
+    estado: str = "ok"
+    detalle: Optional[str] = None
+    tipo_acceso: Optional[str] = None
+    similitud: Optional[float] = None
+    id_persona: Optional[int] = None
+    nombre: Optional[str] = None
+    apellidos: Optional[str] = None
+    id_evento: Optional[int] = None
+
+
+class ResultadoReconocimientoMultiples(BaseModel):
+    """Respuesta agregada para múltiples rostros en una sola imagen."""
+    total_detectados: int
+    resultados: list[ResultadoReconocimientoRostro]
+
+
 class ResultadoEntrenamiento(BaseModel):
     """Resumen de ejecución del entrenamiento del clasificador SVM."""
     personas_entrenadas: int

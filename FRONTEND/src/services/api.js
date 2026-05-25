@@ -70,6 +70,13 @@ export const identificarRostro = (file, id_camara) => {
   return api.post('/reconocimiento/identificar', form)
 }
 
+export const identificarRostrosMultiples = (file, id_camara) => {
+  const form = new FormData()
+  form.append('imagen', file)
+  if (id_camara) form.append('id_camara', id_camara)
+  return api.post('/reconocimiento/identificar/multiples', form)
+}
+
 // ── Eventos ───────────────────────────────────────────────────────
 export const getEventos = (params) => api.get('/reconocimiento/eventos', { params })
 

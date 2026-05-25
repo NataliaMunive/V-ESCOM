@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getEventos, getCamaras, identificarRostro } from '../services/api'
+import { getEventos, getCamaras, identificarRostrosMultiples } from '../services/api'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -45,7 +45,7 @@ export default function Dashboard() {
     setIdentificando(true)
     setResultado(null)
     try {
-      const res = await identificarRostro(file)
+      const res = await identificarRostrosMultiples(file)
       setResultado(res.data)
       cargarDatos()
     } catch (err) {
@@ -114,9 +114,8 @@ export default function Dashboard() {
           </div>
 
           <div
-            className="drop-zone"
+            className={`drop-zone ${preview ? 'drop-zone-preview' : ''}`}
             onClick={() => fileRef.current.click()}
-            style={preview ? { padding: 0, overflow: 'hidden' } : {}}
           >
             {preview ? (
               <img src={preview} alt="Preview" className="preview-img" />
@@ -152,22 +151,57 @@ export default function Dashboard() {
           </div>
 
           {resultado && !resultado.error && (
-            <div className={`resultado ${resultado.tipo_acceso === 'Autorizado' ? 'resultado-ok' : 'resultado-alerta'}`}>
-              <div className="resultado-tipo">
-                <img
-                  src={resultado.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'}
-                  alt=""
-                  style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}
-                />
-                {resultado.tipo_acceso}
-              </div>
-              {resultado.nombre && (
-                <p className="resultado-nombre">{resultado.nombre} {resultado.apellidos}</p>
+            <div className="resultado-lote">
+              {'resultados' in resultado ? (
+                <>
+                  <p className="resultado-lote-titulo">{resultado.total_detectados} rostro(s) detectado(s)</p>
+                  <div className="resultado-lote-lista">
+                    {resultado.resultados.map((item) => (
+                      <div key={`${item.indice_rostro}-${item.id_evento ?? 'tmp'}`} className={`resultado ${item.estado === 'ok' && item.tipo_acceso === 'Autorizado' ? 'resultado-ok' : 'resultado-alerta'}`}>
+                        <div className="resultado-tipo">
+                          <img
+                            src={item.estado === 'ok' && item.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'}
+                            alt=""
+                            style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}
+                          />
+                          Rostro #{item.indice_rostro} {item.estado === 'ok' ? item.tipo_acceso : 'Error'}
+                        </div>
+                        {item.estado === 'ok' ? (
+                          <>
+                            {item.nombre && (
+                              <p className="resultado-nombre">{item.nombre} {item.apellidos}</p>
+                            )}
+                            <p className="resultado-sim">
+                              Similitud: <strong>{(item.similitud * 100).toFixed(1)}%</strong>
+                            </p>
+                            <p className="resultado-evento mono">Evento #{item.id_evento}</p>
+                          </>
+                        ) : (
+                          <p>{item.detalle}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className={`resultado ${resultado.tipo_acceso === 'Autorizado' ? 'resultado-ok' : 'resultado-alerta'}`}>
+                  <div className="resultado-tipo">
+                    <img
+                      src={resultado.tipo_acceso === 'Autorizado' ? '/icons/ok.svg' : '/icons/alerta.svg'}
+                      alt=""
+                      style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}
+                    />
+                    {resultado.tipo_acceso}
+                  </div>
+                  {resultado.nombre && (
+                    <p className="resultado-nombre">{resultado.nombre} {resultado.apellidos}</p>
+                  )}
+                  <p className="resultado-sim">
+                    Similitud: <strong>{(resultado.similitud * 100).toFixed(1)}%</strong>
+                  </p>
+                  <p className="resultado-evento mono">Evento #{resultado.id_evento}</p>
+                </div>
               )}
-              <p className="resultado-sim">
-                Similitud: <strong>{(resultado.similitud * 100).toFixed(1)}%</strong>
-              </p>
-              <p className="resultado-evento mono">Evento #{resultado.id_evento}</p>
             </div>
           )}
 

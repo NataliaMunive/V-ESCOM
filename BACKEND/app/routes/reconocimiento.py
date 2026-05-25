@@ -19,6 +19,7 @@ from app.schemas.reconocimiento_schema import (
     DatosPersonaAutorizada,
     ResultadoEntrenamiento,
     ResultadoReconocimiento,
+    ResultadoReconocimientoMultiples,
     ResultadoSubidaMultiple,
     UpdPersonaAutorizada,
 )
@@ -310,6 +311,24 @@ async def identificar(
     - `coseno`: fuerza la prueba rápida por distancia coseno.
     """
     return await reconocimiento_service.identificar_rostro(db, imagen, id_camara, modo=modo)
+
+
+@router.post(
+    "/identificar/multiples",
+    response_model=ResultadoReconocimientoMultiples,
+    summary="Identificar múltiples rostros en una sola imagen",
+)
+async def identificar_multiples(
+    imagen: UploadFile = File(..., description="Imagen con uno o varios rostros"),
+    id_camara: Optional[int] = Form(None, description="ID de la cámara que capturó el frame"),
+    modo: str = Query(
+        "auto",
+        description="Modo de identificación: auto, svm o coseno",
+    ),
+    db: Session = Depends(get_db),
+    _: Administrador = Depends(get_current_admin),
+):
+    return await reconocimiento_service.identificar_rostros_multiples(db, imagen, id_camara, modo=modo)
 
 
 # ─── Historial de eventos ─────────────────────────────────────────────────────

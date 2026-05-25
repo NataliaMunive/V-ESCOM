@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+import cv2
 import numpy as np
 from fastapi import HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
@@ -36,13 +37,15 @@ from app.schemas.reconocimiento_schema import (
     DatosPersonaAutorizada,
     ResultadoImagen,
     ResultadoReconocimiento,
+    ResultadoReconocimientoMultiples,
+    ResultadoReconocimientoRostro,
     ResultadoSubidaMultiple,
     UpdPersonaAutorizada,
 )
 from app.services import notificacion_service
 from app.services.log_sistema_service import registrar_log
 from app.services.websocket_manager import alertas_ws_manager
-from app.utils.face_utils import extraer_embedding
+from app.utils.face_utils import bytes_a_bgr, detectar_rostros, extraer_embedding
 from app.utils.phone_utils import normalizar_telefono_mx
 
 # Umbrales por método:
@@ -284,6 +287,35 @@ def _buscar_persona_profesor_sincronizada(
             if persona is not None:
                 return persona
     return None
+
+
+def _recortar_imagen_por_bbox(imagen_bytes: bytes, bbox: tuple[int, int, int, int]) -> bytes:
+    img_bgr = bytes_a_bgr(imagen_bytes)
+    alto, ancho = img_bgr.shape[:2]
+    x1, y1, x2, y2 = bbox
+    margen_x = int((x2 - x1) * 0.2)
+    margen_y = int((y2 - y1) * 0.2)
+    x1 = max(0, x1 - margen_x)
+    y1 = max(0, y1 - margen_y)
+    x2 = min(ancho, x2 + margen_x)
+    y2 = min(alto, y2 + margen_y)
+    if x2 <= x1 or y2 <= y1:
+        return imagen_bytes
+
+    recorte = img_bgr[y1:y2, x1:x2]
+    exito, buffer = cv2.imencode(".jpg", recorte, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if not exito:
+        return imagen_bytes
+    return buffer.tobytes()
+
+
+class _BytesUpload:
+    def __init__(self, contenido: bytes):
+        self.filename = "rostro.jpg"
+        self._contenido = contenido
+
+    async def read(self) -> bytes:
+        return self._contenido
 
 # ─── CRUD Personas Autorizadas ────────────────────────────────────────────────
 
@@ -551,44 +583,13 @@ async def registrar_multiples_rostros(
     )
 
 
-# ─── Identificación ───────────────────────────────────────────────────────────
-
-async def identificar_rostro(
+async def _procesar_embedding_reconocimiento(
     db: Session,
-    imagen: UploadFile,
+    embedding_nuevo: np.ndarray,
+    contenido: bytes,
     id_camara: Optional[int] = None,
     modo: str = "auto",
 ) -> ResultadoReconocimiento:
-    """
-    Identifica el rostro de la imagen usando el mejor método disponible:
-
-     1. Modelo SVM entrenado (si existe modelos/clasificador_svm.joblib)
-         → más preciso con múltiples fotos por persona y distintos ángulos.
-     2. Búsqueda por distancia coseno en BD (modo prueba rápida / fallback)
-         → funciona sin necesidad de reentrenamiento previo.
-
-     Parámetro `modo`:
-     - "auto": usa SVM si existe; si no, cae a coseno.
-     - "svm": fuerza el uso del modelo SVM y falla si no existe.
-     - "coseno": fuerza el modo rápido de prueba por distancia coseno.
-
-    En ambos casos registra el evento en la BD y retorna el resultado.
-    """
-    contenido = await imagen.read()
-
-    try:
-        embedding_nuevo = await run_in_threadpool(extraer_embedding, contenido)
-    except ValueError as e:
-        registrar_log(
-            db,
-            nivel="WARNING",
-            origen="Motor_IA",
-            tipo="Reconocimiento",
-            mensaje=f"Error al extraer embedding en identificacion: {e}",
-            commit=True,
-        )
-        raise HTTPException(status_code=422, detail=str(e))
-
     modo_normalizado = (modo or "auto").strip().lower()
     if modo_normalizado not in MODOS_IDENTIFICACION:
         raise HTTPException(
@@ -600,7 +601,7 @@ async def identificar_rostro(
 
     mejor_similitud = -1.0
     mejor_persona: Optional[PersonaAutorizada] = None
-    metodo_usado = "coseno"   # para logging
+    metodo_usado = "coseno"
     umbral_usado = SIMILITUD_UMBRAL_COSENO
     svm_fallo = False
     persona_svm: Optional[PersonaAutorizada] = None
@@ -608,7 +609,6 @@ async def identificar_rostro(
     persona_coseno: Optional[PersonaAutorizada] = None
     similitud_coseno = -1.0
 
-    # ── Intento 1: Modelo SVM entrenado ──────────────────────────────────────
     artefacto_svm = _cargar_modelo_svm() if modo_normalizado != "coseno" else None
     if modo_normalizado == "svm" and artefacto_svm is None:
         raise HTTPException(
@@ -636,7 +636,6 @@ async def identificar_rostro(
                     similitud_svm = probabilidad
         except Exception as e_svm:
             svm_fallo = True
-            # Si el SVM falla por cualquier razón, caer al coseno
             registrar_log(
                 db,
                 nivel="WARNING",
@@ -646,7 +645,6 @@ async def identificar_rostro(
                 commit=False,
             )
 
-    # ── Intento 2: Búsqueda coseno (fallback / modo prueba rápida) ───────────
     usar_coseno = (
         modo_normalizado == "coseno"
         or artefacto_svm is None
@@ -669,7 +667,6 @@ async def identificar_rostro(
             metodo_usado = "coseno"
             umbral_usado = SIMILITUD_UMBRAL_COSENO
     elif modo_normalizado == "svm":
-        # Si SVM no supera el umbral, no se cae a coseno: el modo svm debe ser estricto.
         if persona_svm is not None:
             mejor_persona = persona_svm
             mejor_similitud = similitud_svm
@@ -688,7 +685,6 @@ async def identificar_rostro(
                 key=lambda item: item[1],
             )
 
-    # ── Clasificar resultado ──────────────────────────────────────────────────
     if mejor_persona and mejor_similitud >= umbral_usado:
         tipo_acceso = "Autorizado"
         id_persona = mejor_persona.id_persona
@@ -696,7 +692,6 @@ async def identificar_rostro(
         tipo_acceso = "No Autorizado"
         id_persona = None
 
-    # Guardar evento de acceso
     evento = EventoAcceso(
         id_camara=id_camara,
         id_persona=id_persona,
@@ -711,15 +706,15 @@ async def identificar_rostro(
         try:
             directorio_intrusos = os.getenv("DIRECTORIO_INTRUSOS", "capturas_intrusos")
             os.makedirs(directorio_intrusos, exist_ok=True)
- 
+
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             nombre_archivo = f"intruso_ev{evento.id_evento}_{timestamp}.jpg"
             ruta_captura = os.path.join(directorio_intrusos, nombre_archivo)
- 
+
             with open(ruta_captura, "wb") as f:
                 f.write(contenido)
- 
+
             registrar_log(
                 db,
                 nivel="INFO",
@@ -739,7 +734,7 @@ async def identificar_rostro(
 
         pna = PersonaNoAutorizada(
             embedding_detectado=embedding_detectado,
-            ruta_imagen_captura=ruta_captura,   # ← campo ahora poblado
+            ruta_imagen_captura=ruta_captura,
         )
         db.add(pna)
 
@@ -797,6 +792,115 @@ async def identificar_rostro(
         nombre=mejor_persona.nombre if mejor_persona and tipo_acceso == "Autorizado" else None,
         apellidos=mejor_persona.apellidos if mejor_persona and tipo_acceso == "Autorizado" else None,
         id_evento=evento.id_evento,
+    )
+
+
+# ─── Identificación ───────────────────────────────────────────────────────────
+
+async def identificar_rostro(
+    db: Session,
+    imagen: UploadFile,
+    id_camara: Optional[int] = None,
+    modo: str = "auto",
+) -> ResultadoReconocimiento:
+    """
+    Identifica el rostro de la imagen usando el mejor método disponible:
+
+     1. Modelo SVM entrenado (si existe modelos/clasificador_svm.joblib)
+         → más preciso con múltiples fotos por persona y distintos ángulos.
+     2. Búsqueda por distancia coseno en BD (modo prueba rápida / fallback)
+         → funciona sin necesidad de reentrenamiento previo.
+
+     Parámetro `modo`:
+     - "auto": usa SVM si existe; si no, cae a coseno.
+     - "svm": fuerza el uso del modelo SVM y falla si no existe.
+     - "coseno": fuerza el modo rápido de prueba por distancia coseno.
+
+    En ambos casos registra el evento en la BD y retorna el resultado.
+    """
+    contenido = await imagen.read()
+
+    try:
+        embedding_nuevo = await run_in_threadpool(extraer_embedding, contenido)
+    except ValueError as e:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Motor_IA",
+            tipo="Reconocimiento",
+            mensaje=f"Error al extraer embedding en identificacion: {e}",
+            commit=True,
+        )
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return await _procesar_embedding_reconocimiento(db, embedding_nuevo, contenido, id_camara=id_camara, modo=modo)
+
+
+async def identificar_rostros_multiples(
+    db: Session,
+    imagen: UploadFile,
+    id_camara: Optional[int] = None,
+    modo: str = "auto",
+) -> ResultadoReconocimientoMultiples:
+    """Identifica todos los rostros visibles en una imagen.
+
+    Cada rostro detectado se recorta y se procesa con el mismo flujo de
+    identificación usado para una sola cara.
+    """
+    contenido = await imagen.read()
+
+    try:
+        rostros = await run_in_threadpool(detectar_rostros, contenido)
+    except ValueError as e:
+        registrar_log(
+            db,
+            nivel="WARNING",
+            origen="Motor_IA",
+            tipo="Reconocimiento",
+            mensaje=f"Error al detectar rostros múltiples: {e}",
+            commit=True,
+        )
+        raise HTTPException(status_code=422, detail=str(e))
+
+    resultados: list[ResultadoReconocimientoRostro] = []
+    for indice, rostro in enumerate(rostros, start=1):
+        try:
+            resultado = await _procesar_embedding_reconocimiento(
+                db,
+                rostro.embedding,
+                contenido,
+                id_camara=id_camara,
+                modo=modo,
+            )
+            resultados.append(
+                ResultadoReconocimientoRostro(
+                    indice_rostro=indice,
+                    bbox=list(rostro.bbox),
+                    estado="ok",
+                    tipo_acceso=resultado.tipo_acceso,
+                    similitud=resultado.similitud,
+                    id_persona=resultado.id_persona,
+                    nombre=resultado.nombre,
+                    apellidos=resultado.apellidos,
+                    id_evento=resultado.id_evento,
+                )
+            )
+        except HTTPException as exc:
+            detalle = exc.detail
+            if isinstance(detalle, dict):
+                detalle = detalle.get("mensaje", str(detalle))
+            resultados.append(
+                ResultadoReconocimientoRostro(
+                    indice_rostro=indice,
+                    bbox=list(rostro.bbox),
+                    estado="error",
+                    detalle=str(detalle),
+                )
+            )
+
+    return ResultadoReconocimientoMultiples(
+        total_detectados=len(rostros),
+        resultados=resultados,
     )
 
 

@@ -143,6 +143,14 @@
   margin-bottom: 16px;
 }
 
+.drop-zone-preview {
+  padding: 12px;
+  min-height: 240px;
+  align-items: stretch;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(0, 194, 224, 0.03), rgba(0, 0, 0, 0));
+}
+
 .drop-zone:hover {
   border-color: var(--acento);
   background: rgba(0,194,224,0.03);
@@ -154,9 +162,13 @@
 
 .preview-img {
   width: 100%;
-  height: 200px;
-  object-fit: cover;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  object-position: center;
   border-radius: calc(var(--radio) - 2px);
+  background: #07101c;
+  display: block;
 }
 
 /* ── Botones ─────────────────────────────────────────────────── */
@@ -196,6 +208,24 @@
 .resultado { border-radius: var(--radio); padding: 16px; animation: fadeIn 0.3s ease; }
 .resultado-ok { background: rgba(45,198,83,0.08); border: 1px solid rgba(45,198,83,0.25); }
 .resultado-alerta { background: rgba(230,57,70,0.08); border: 1px solid rgba(230,57,70,0.25); }
+
+.resultado-lote {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resultado-lote-titulo {
+  font-size: 13px;
+  color: var(--texto-muted);
+  font-weight: 600;
+}
+
+.resultado-lote-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .resultado-tipo {
   font-size: 15px;

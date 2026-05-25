@@ -3,6 +3,7 @@ Utilidades de reconocimiento facial usando InsightFace (ArcFace).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 import warnings
 
@@ -68,6 +69,13 @@ except ImportError:
         )
 
 
+@dataclass
+class RostroDetectado:
+    bbox: tuple[int, int, int, int]
+    embedding: np.ndarray
+    score: float | None = None
+
+
 def bytes_a_bgr(imagen_bytes: bytes) -> np.ndarray:
     """Convierte bytes de imagen (JPEG/PNG) a array BGR de OpenCV."""
     array = np.frombuffer(imagen_bytes, dtype=np.uint8)
@@ -95,10 +103,11 @@ def normalizar_l2(vector: np.ndarray) -> np.ndarray:
     return vector / norma if norma > 0 else vector
 
 
-def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
-    """
-    Recibe los bytes de una imagen y retorna el embedding ArcFace (512-d).
-    Lanza ValueError si no se detecta exactamente un rostro.
+def detectar_rostros(imagen_bytes: bytes) -> list[RostroDetectado]:
+    """Detecta todos los rostros visibles en una imagen.
+
+    Si la detección directa falla, intenta una segunda pasada con la imagen
+    reescalada para rescatar fotos pequeñas o comprimidas.
     """
     img_bgr = bytes_a_bgr(imagen_bytes)
     app = _get_face_app()
@@ -114,13 +123,34 @@ def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
             "No se detectó ningún rostro en la imagen. "
             "Prueba con una foto más frontal, sin recortes extremos, con mejor iluminación y en formato JPG/PNG."
         )
+
+    detectados: list[RostroDetectado] = []
+    for rostro in rostros:
+        bbox = tuple(int(round(valor)) for valor in rostro.bbox)
+        score = getattr(rostro, "det_score", None)
+        detectados.append(
+            RostroDetectado(
+                bbox=bbox,
+                embedding=rostro.normed_embedding.astype(np.float32),
+                score=float(score) if score is not None else None,
+            )
+        )
+
+    return detectados
+
+
+def extraer_embedding(imagen_bytes: bytes) -> np.ndarray:
+    """
+    Recibe los bytes de una imagen y retorna el embedding ArcFace (512-d).
+    Lanza ValueError si no se detecta exactamente un rostro.
+    """
+    rostros = detectar_rostros(imagen_bytes)
     if len(rostros) > 1:
         raise ValueError(
             f"Se detectaron {len(rostros)} rostros. Envía una imagen con un solo rostro"
         )
 
-    embedding = rostros[0].normed_embedding
-    return embedding.astype(np.float32)
+    return rostros[0].embedding
 
 
 def similitud_coseno(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
