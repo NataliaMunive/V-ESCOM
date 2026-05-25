@@ -52,6 +52,17 @@ export const subirRostro      = (id, file, forzar = false) => {
   return api.post(url, form)
 }
 
+export const subirRostrosMultiples = (id, files, forzar = false) => {
+  const form = new FormData()
+  files.forEach((file) => form.append('imagenes', file))
+  const url = forzar
+    ? `/reconocimiento/personas/${id}/rostros?forzar=true`
+    : `/reconocimiento/personas/${id}/rostros`
+  return api.post(url, form)
+}
+
+export const entrenarReconocimiento = () => api.post('/reconocimiento/entrenar')
+
 export const identificarRostro = (file, id_camara) => {
   const form = new FormData()
   form.append('imagen', file)

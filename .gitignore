@@ -4,3 +4,12 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+
+# Archivos generados por el sistema y capturas locales
+BACKEND/fotos_rostros/
+BACKEND/capturas_intrusos/
+BACKEND/modelos/
+
+# Caché de Vite / dependencias de frontend
+FRONTEND/node_modules/
+FRONTEND/dist/

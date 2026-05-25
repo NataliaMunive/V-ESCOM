@@ -64,6 +64,32 @@ class ResultadoReconocimiento(BaseModel):
     id_evento: int
 
 
+class ResultadoEntrenamiento(BaseModel):
+    """Resumen de ejecución del entrenamiento del clasificador SVM."""
+    personas_entrenadas: int
+    total_embeddings: int
+    accuracy: Optional[float] = None
+    modelo_guardado_en: str
+    mensaje: str
+
+
+class ResultadoImagen(BaseModel):
+    """Resultado individual de procesamiento para una imagen en carga múltiple."""
+    nombre_archivo: str
+    estado: str
+    detalle: str
+    similitud: Optional[float] = None
+
+
+class ResultadoSubidaMultiple(BaseModel):
+    """Respuesta agregada para registro de múltiples fotos de una persona."""
+    id_persona: int
+    total_recibidas: int
+    exitosas: int
+    fallidas: int
+    resultados: list[ResultadoImagen]
+
+
 # ─── Bitacora de eventos ──────────────────────────────────────────────────────
 
 class DatosEvento(BaseModel):

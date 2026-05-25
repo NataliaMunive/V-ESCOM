@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   getPersonas, getPersona, getEventos, crearPersona, actualizarPersona,
-  eliminarPersona, subirRostro, getCubiculos
+  eliminarPersona, subirRostro, getCubiculos, subirRostrosMultiples, entrenarReconocimiento
 } from '../services/api'
+import { conectarAlertasWebSocket } from '../services/wsAlertas'
 import './Personas.css'
 
 const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', id_cubiculo: '', rol: 'Profesor' }
@@ -22,10 +23,41 @@ export default function Personas() {
   const [busqueda, setBusqueda] = useState('')
   const [subiendoFoto, setSubiendoFoto] = useState(null) // id_persona
   const fotoRef = useRef()
+  const fotosMultiplesRef = useRef()
   const [duplicadoInfo, setDuplicadoInfo] = useState(null)
+  const [loteInfo, setLoteInfo] = useState(null)
+  const [loteArchivos, setLoteArchivos] = useState([])
+  const [entrenando, setEntrenando] = useState(false)
+  const [resultadoEntrenamiento, setResultadoEntrenamiento] = useState(null)
+  const [resultadoModal, setResultadoModal] = useState(false)
   const [cubiculos, setCubiculos] = useState([])
+  const [modalLote, setModalLote] = useState(null)
   const fotoPerfil = perfil?.ruta_rostro ? `/${String(perfil.ruta_rostro).replace(/\\/g, '/')}` : null
   useEffect(() => { cargar(); cargarCubiculos() }, [])
+  // abrir websocket de alertas (incluye notificaciones de entrenamiento)
+  const wsRef = useRef(null)
+  useEffect(() => {
+    const token = localStorage.getItem('vescom_token')
+    if (!token) return
+    const ws = conectarAlertasWebSocket({
+      token,
+      onMessage: (msg) => {
+        if (!msg || typeof msg !== 'object') return
+        if (msg.type === 'entrenamiento_completado') {
+          const info = msg.data || {}
+          setEntrenando(false)
+          setResultadoEntrenamiento(info)
+          setResultadoModal(true)
+          try { cargar() } catch {}
+        }
+      },
+      onOpen: () => {},
+      onClose: () => {},
+      onError: () => {},
+    })
+    wsRef.current = ws
+    return () => { try { wsRef.current?.close() } catch {} }
+  }, [])
 
   const cargar = async () => {
     setCargando(true)
@@ -90,6 +122,17 @@ export default function Personas() {
 
   const cerrarModal = () => { setModal(null); setSeleccionada(null); setError('') }
   const cerrarPerfil = () => { setVerModal(false); setPerfil(null); setEventosPerfil([]); setCargandoPerfil(false) }
+  const cerrarLote = () => {
+    setModalLote(null)
+    setLoteInfo(null)
+    setLoteArchivos(prev => {
+      prev.forEach(item => {
+        try { URL.revokeObjectURL(item.preview) } catch {}
+      })
+      return []
+    })
+    if (fotosMultiplesRef.current) fotosMultiplesRef.current.value = ''
+  }
 
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }))
 
@@ -120,6 +163,22 @@ export default function Personas() {
       cargar()
     } catch (err) {
       alert(err.response?.data?.detail || 'Error al eliminar')
+    }
+  }
+
+  const handleEntrenar = async () => {
+    if (!confirm('Esto entrenará el clasificador SVM con los embeddings guardados. ¿Continuar?')) return
+    setEntrenando(true)
+    setError('')
+    try {
+      // Llamada asíncrona: el servidor iniciará el entrenamiento en background
+      await entrenarReconocimiento()
+      // Limpiar resultado previo y esperar notificación por WebSocket
+      setResultadoEntrenamiento(null)
+      setResultadoModal(false)
+    } catch (err) {
+      setEntrenando(false)
+      setError(err.response?.data?.detail?.mensaje || err.response?.data?.detail || 'Error al iniciar el entrenamiento')
     }
   }
 
@@ -157,6 +216,51 @@ export default function Personas() {
     setSubiendoFoto(null)
   }
 }
+
+  const abrirLote = (p) => {
+    setModalLote({ id_persona: p.id_persona, nombre: `${p.nombre} ${p.apellidos}` })
+    setLoteInfo(null)
+    setLoteArchivos([])
+  }
+
+  const handleSeleccionarLote = (e) => {
+    const files = Array.from(e?.target?.files || [])
+    if (!files.length) return
+    setLoteInfo(null)
+    setLoteArchivos(prev => {
+      const existentes = new Set(prev.map(item => `${item.file.name}_${item.file.size}_${item.file.lastModified}`))
+      const nuevos = files
+        .filter(file => !existentes.has(`${file.name}_${file.size}_${file.lastModified}`))
+        .map(file => ({
+          file,
+          preview: URL.createObjectURL(file),
+        }))
+      return [...prev, ...nuevos]
+    })
+    if (fotosMultiplesRef.current) fotosMultiplesRef.current.value = ''
+  }
+
+  const subirLote = async (forzar = false) => {
+    if (!loteArchivos.length || !modalLote) return
+    setSubiendoFoto(modalLote.id_persona)
+    setLoteInfo(null)
+    try {
+      const res = await subirRostrosMultiples(modalLote.id_persona, loteArchivos.map(item => item.file), forzar)
+      setLoteInfo(res.data)
+      setLoteArchivos(prev => {
+        prev.forEach(item => {
+          try { URL.revokeObjectURL(item.preview) } catch {}
+        })
+        return []
+      })
+      cargar()
+    } catch (err) {
+      setLoteInfo(err.response?.data?.detail?.resultado || null)
+      setError(err.response?.data?.detail?.mensaje || err.response?.data?.detail || 'Error al subir varias fotos')
+    } finally {
+      setSubiendoFoto(null)
+    }
+  }
  
 // helper para cuando el usuario decide forzar desde el modal
 const handleForzarRostro = async () => {
@@ -187,7 +291,12 @@ const handleForzarRostro = async () => {
           <h1 className="page-title">Personas Autorizadas</h1>
           <p className="page-sub">{personas.length} registros · Profesores, administrativos e investigadores autorizados</p>
         </div>
-        <button className="btn-primary" onClick={abrirCrear}>+ Registrar persona autorizada</button>
+        <div className="header-actions">
+          <button className="btn-secondary" onClick={handleEntrenar} disabled={entrenando}>
+            {entrenando ? 'Entrenando...' : 'Entrenar SVM'}
+          </button>
+          <button className="btn-primary" onClick={abrirCrear}>+ Registrar persona autorizada</button>
+        </div>
       </div>
 
       {/* Buscador */}
@@ -259,6 +368,9 @@ const handleForzarRostro = async () => {
                       </button>
                       <button className="btn-accion" type="button" title="Ver perfil" aria-label="Ver perfil" onClick={() => abrirPerfil(p)}>
                         <img src="/icons/ver.svg" alt="" />
+                      </button>
+                      <button className="btn-accion" type="button" title="Subir varias fotos" aria-label="Subir varias fotos" onClick={() => abrirLote(p)}>
+                        <span className="btn-accion-text">+</span>
                       </button>
                       <button className="btn-accion btn-danger" type="button" title="Eliminar" aria-label="Eliminar" onClick={() => handleEliminar(p)}>
                         <img src="/icons/eliminar.svg" alt="" />
@@ -459,6 +571,145 @@ const handleForzarRostro = async () => {
     </div>
   </div>
 )}
+
+      {modalLote && (
+        <div className="modal-overlay" onClick={cerrarLote}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
+            <div className="modal-header">
+              <h3>Subir varias fotos</h3>
+              <button className="modal-close" onClick={cerrarLote}>✕</button>
+            </div>
+
+            <div className="modal-form">
+              <p className="modal-helper">
+                Persona seleccionada: <strong>{modalLote.nombre}</strong>
+              </p>
+              <p className="modal-helper">
+                Sube varias fotos con diferentes angulos e iluminacion. El sistema procesara cada imagen por separado.
+              </p>
+
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => fotosMultiplesRef.current?.click()}
+                disabled={subiendoFoto === modalLote.id_persona}
+              >
+                {loteArchivos.length > 0 ? 'Agregar más fotos' : 'Seleccionar fotos'}
+              </button>
+
+              <input
+                type="file"
+                ref={fotosMultiplesRef}
+                accept="image/*"
+                multiple
+                onChange={handleSeleccionarLote}
+                className="input-multifoto"
+                style={{ display: 'none' }}
+              />
+
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={cerrarLote}>Cancelar</button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => subirLote(false)}
+                  disabled={!loteArchivos.length || subiendoFoto === modalLote.id_persona}
+                >
+                  {subiendoFoto === modalLote.id_persona ? 'Subiendo...' : `Subir ${loteArchivos.length || ''}`}
+                </button>
+              </div>
+
+              {loteArchivos.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 13, color: 'var(--texto-suave)' }}>
+                  {loteArchivos.length} archivo{loteArchivos.length === 1 ? '' : 's'} seleccionado{loteArchivos.length === 1 ? '' : 's'}:
+                  <div className="lote-preview-grid">
+                    {loteArchivos.map((item, idx) => (
+                      <div key={`${item.file.name}-${idx}`} className="lote-preview-card">
+                        <img src={item.preview} alt={item.file.name} className="lote-preview-img" />
+                        <div className="lote-preview-name" title={item.file.name}>{item.file.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {loteInfo && (
+                <div className="lote-resumen">
+                  <div className="lote-kpis">
+                    <span><strong>{loteInfo.exitosas ?? 0}</strong> exitosas</span>
+                    <span><strong>{loteInfo.fallidas ?? 0}</strong> fallidas</span>
+                    <span><strong>{loteInfo.total_recibidas ?? 0}</strong> recibidas</span>
+                  </div>
+
+                  <div className="lote-lista">
+                    {(loteInfo.resultados || []).map((item, idx) => (
+                      <div key={`${item.nombre_archivo}-${idx}`} className={`lote-item lote-${item.estado}`}>
+                        <div className="lote-item-top">
+                          <strong>{item.nombre_archivo}</strong>
+                          <span>{item.estado}</span>
+                        </div>
+                        <div className="lote-item-detail">{item.detalle}</div>
+                        {typeof item.similitud === 'number' && (
+                          <div className="lote-item-detail">Similitud: {(item.similitud * 100).toFixed(1)}%</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resultadoModal && resultadoEntrenamiento && (
+        <div className="modal-overlay" onClick={() => setResultadoModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h3>Resultado del entrenamiento</h3>
+              <button className="modal-close" onClick={() => setResultadoModal(false)}>✕</button>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              <p style={{ marginBottom: 8 }}>{resultadoEntrenamiento.mensaje || 'Entrenamiento finalizado'}</p>
+              {resultadoEntrenamiento.traceback && (
+                <details style={{ marginBottom: 8 }}>
+                  <summary style={{ cursor: 'pointer' }}>Mostrar detalles del error</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto', background: 'var(--fondo-card2)', padding: 12, borderRadius: 6, marginTop: 8 }}>{resultadoEntrenamiento.traceback}</pre>
+                </details>
+              )}
+              {resultadoEntrenamiento.error && (
+                <div style={{ color: '#f1c40f', marginBottom: 8 }}>Error: {resultadoEntrenamiento.error}</div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="kpi"><strong>{resultadoEntrenamiento.personas_entrenadas ?? '—'}</strong><div>Personas entrenadas</div></div>
+                <div className="kpi"><strong>{resultadoEntrenamiento.total_embeddings ?? '—'}</strong><div>Total embeddings</div></div>
+                <div className="kpi"><strong>{typeof resultadoEntrenamiento.accuracy === 'number' ? (resultadoEntrenamiento.accuracy * 100).toFixed(2) + '%' : '—'}</strong><div>Accuracy (CV)</div></div>
+                <div className="kpi"><strong style={{ wordBreak: 'break-all' }}>{resultadoEntrenamiento.modelo_guardado_en ?? '—'}</strong><div>Ruta del modelo</div></div>
+              </div>
+
+              {Array.isArray(resultadoEntrenamiento.omitidos) && resultadoEntrenamiento.omitidos.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <strong>Omitidos:</strong>
+                  <ul>
+                    {resultadoEntrenamiento.omitidos.map((o, idx) => <li key={idx}>{o}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 12, color: 'var(--texto-suave)' }}>
+                  {resultadoEntrenamiento.timestamp ? `Finalizado: ${new Date(resultadoEntrenamiento.timestamp * 1000).toLocaleString()}` : ''}
+                  {resultadoEntrenamiento.duration_seconds ? ` · Duración: ${resultadoEntrenamiento.duration_seconds}s` : ''}
+                </div>
+                <div>
+                  <button className="btn-secondary" onClick={() => setResultadoModal(false)}>Cerrar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

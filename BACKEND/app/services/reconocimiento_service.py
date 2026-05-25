@@ -24,6 +24,7 @@ from typing import Any, Optional
 
 import numpy as np
 from fastapi import HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.models.evento import EventoAcceso, PersonaNoAutorizada
@@ -33,7 +34,9 @@ from app.models.rostro_autorizado import RostroAutorizado
 from app.schemas.reconocimiento_schema import (
     CrearPersonaAutorizada,
     DatosPersonaAutorizada,
+    ResultadoImagen,
     ResultadoReconocimiento,
+    ResultadoSubidaMultiple,
     UpdPersonaAutorizada,
 )
 from app.services import notificacion_service
@@ -42,7 +45,16 @@ from app.services.websocket_manager import alertas_ws_manager
 from app.utils.face_utils import extraer_embedding
 from app.utils.phone_utils import normalizar_telefono_mx
 
+# Umbrales por método:
+# - SVM: probabilidad del clasificador (recomendado >= 0.60)
+# - Coseno: similitud ArcFace (recomendado >= 0.45)
 SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+SIMILITUD_UMBRAL_COSENO = float(
+    os.getenv("SIMILITUD_UMBRAL_COSENO", str(max(SIMILITUD_UMBRAL, 0.45)))
+)
+PROBABILIDAD_UMBRAL_SVM = float(
+    os.getenv("PROBABILIDAD_UMBRAL_SVM", str(max(SIMILITUD_UMBRAL, 0.60)))
+)
 MODOS_IDENTIFICACION = {"auto", "svm", "coseno"}
 
 # Ruta del modelo SVM entrenado (configurable desde .env)
@@ -54,6 +66,7 @@ _RUTA_MODELO_SVM = Path(
 
 _modelo_svm_cache: dict[str, Any] = {}   # claves: "pipeline", "codificador_etiquetas"
 _modelo_svm_cargado: bool = False
+_modelo_svm_mtime: float | None = None
 
 
 def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
@@ -66,23 +79,39 @@ def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
         forzar_recarga: Si True, descarta la caché y recarga desde disco.
                         Útil después de un reentrenamiento.
     """
-    global _modelo_svm_cache, _modelo_svm_cargado
+    global _modelo_svm_cache, _modelo_svm_cargado, _modelo_svm_mtime
 
     if forzar_recarga:
         _modelo_svm_cache = {}
         _modelo_svm_cargado = False
+        _modelo_svm_mtime = None
 
-    if _modelo_svm_cargado:
-        return _modelo_svm_cache if _modelo_svm_cache else None
+    # Si ya estaba cargado, validar si el archivo en disco cambió (multi-worker friendly).
+    if _modelo_svm_cargado and not forzar_recarga:
+        if _RUTA_MODELO_SVM.exists():
+            try:
+                mtime_actual = _RUTA_MODELO_SVM.stat().st_mtime
+                if _modelo_svm_mtime is not None and mtime_actual <= _modelo_svm_mtime:
+                    return _modelo_svm_cache if _modelo_svm_cache else None
+                # El archivo cambió: invalidar cache para forzar recarga en este worker.
+                _modelo_svm_cache = {}
+                _modelo_svm_cargado = False
+                _modelo_svm_mtime = None
+            except Exception:
+                return _modelo_svm_cache if _modelo_svm_cache else None
+        else:
+            return _modelo_svm_cache if _modelo_svm_cache else None
 
     _modelo_svm_cargado = True  # marcar aunque falle, para no reintentar en cada request
 
     if not _RUTA_MODELO_SVM.exists():
+        _modelo_svm_mtime = None
         return None
 
     try:
         import joblib
         artefacto = joblib.load(_RUTA_MODELO_SVM)
+        _modelo_svm_mtime = _RUTA_MODELO_SVM.stat().st_mtime
         # Validar que tiene las claves esperadas del nuevo script
         if "pipeline" in artefacto and "codificador_etiquetas" in artefacto:
             _modelo_svm_cache = artefacto
@@ -125,7 +154,6 @@ def _identificar_con_svm(
 
     Returns:
         (id_persona, probabilidad_maxima)
-        Si la probabilidad máxima es menor a SIMILITUD_UMBRAL devuelve (None, prob).
     """
     pipeline = artefacto["pipeline"]
     codificador = artefacto["codificador_etiquetas"]
@@ -352,7 +380,7 @@ async def registrar_rostro(
  
     # Extraer embedding
     try:
-        embedding = extraer_embedding(contenido)
+        embedding = await run_in_threadpool(extraer_embedding, contenido)
     except ValueError as e:
         registrar_log(
             db,
@@ -365,7 +393,9 @@ async def registrar_rostro(
         raise HTTPException(status_code=422, detail=str(e))
  
     if not forzar:
-        UMBRAL_DUPLICADO = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+        UMBRAL_DUPLICADO = float(
+            os.getenv("SIMILITUD_UMBRAL_COSENO", str(SIMILITUD_UMBRAL_COSENO))
+        )
         distancia = RostroAutorizado.embedding.cosine_distance(embedding.tolist())
         duplicado = (
             db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
@@ -443,6 +473,84 @@ async def registrar_rostro(
     return _a_schema(persona, db)
 
 
+async def registrar_multiples_rostros(
+    db: Session,
+    id_persona: int,
+    imagenes: list[UploadFile],
+    directorio_fotos: str = "fotos_rostros",
+    forzar: bool = False,
+) -> ResultadoSubidaMultiple:
+    """Registra múltiples embeddings para una persona autorizada.
+
+    Procesa cada imagen de forma independiente para devolver un resultado por
+    archivo sin interrumpir el lote completo ante fallos parciales.
+    """
+    obtener_persona(db, id_persona)
+
+    resultados: list[ResultadoImagen] = []
+    exitosas = 0
+
+    for imagen in imagenes:
+        nombre_archivo = imagen.filename or "archivo_sin_nombre"
+        try:
+            await registrar_rostro(
+                db=db,
+                id_persona=id_persona,
+                imagen=imagen,
+                directorio_fotos=directorio_fotos,
+                forzar=forzar,
+            )
+            resultados.append(
+                ResultadoImagen(
+                    nombre_archivo=nombre_archivo,
+                    estado="ok",
+                    detalle="Embedding registrado correctamente.",
+                )
+            )
+            exitosas += 1
+        except HTTPException as exc:
+            estado = "error"
+            similitud = None
+            detalle = "No se pudo procesar la imagen."
+
+            if isinstance(exc.detail, dict):
+                detalle = str(exc.detail.get("mensaje", detalle))
+                if exc.status_code == 409:
+                    estado = "duplicado"
+                    similitud_val = exc.detail.get("similitud")
+                    if similitud_val is not None:
+                        similitud = float(similitud_val)
+            elif isinstance(exc.detail, str):
+                detalle = exc.detail
+
+            resultados.append(
+                ResultadoImagen(
+                    nombre_archivo=nombre_archivo,
+                    estado=estado,
+                    detalle=detalle,
+                    similitud=similitud,
+                )
+            )
+        except Exception as exc:
+            resultados.append(
+                ResultadoImagen(
+                    nombre_archivo=nombre_archivo,
+                    estado="error",
+                    detalle=f"Error inesperado: {exc}",
+                )
+            )
+
+    total = len(imagenes)
+    fallidas = total - exitosas
+    return ResultadoSubidaMultiple(
+        id_persona=id_persona,
+        total_recibidas=total,
+        exitosas=exitosas,
+        fallidas=fallidas,
+        resultados=resultados,
+    )
+
+
 # ─── Identificación ───────────────────────────────────────────────────────────
 
 async def identificar_rostro(
@@ -469,7 +577,7 @@ async def identificar_rostro(
     contenido = await imagen.read()
 
     try:
-        embedding_nuevo = extraer_embedding(contenido)
+        embedding_nuevo = await run_in_threadpool(extraer_embedding, contenido)
     except ValueError as e:
         registrar_log(
             db,
@@ -493,6 +601,12 @@ async def identificar_rostro(
     mejor_similitud = -1.0
     mejor_persona: Optional[PersonaAutorizada] = None
     metodo_usado = "coseno"   # para logging
+    umbral_usado = SIMILITUD_UMBRAL_COSENO
+    svm_fallo = False
+    persona_svm: Optional[PersonaAutorizada] = None
+    similitud_svm = -1.0
+    persona_coseno: Optional[PersonaAutorizada] = None
+    similitud_coseno = -1.0
 
     # ── Intento 1: Modelo SVM entrenado ──────────────────────────────────────
     artefacto_svm = _cargar_modelo_svm() if modo_normalizado != "coseno" else None
@@ -507,18 +621,21 @@ async def identificar_rostro(
 
     if artefacto_svm is not None and modo_normalizado in {"auto", "svm"}:
         try:
-            id_persona_svm, probabilidad = _identificar_con_svm(embedding_nuevo, artefacto_svm)
-            if probabilidad >= SIMILITUD_UMBRAL:
+            id_persona_svm, probabilidad = await run_in_threadpool(
+                _identificar_con_svm,
+                embedding_nuevo,
+                artefacto_svm,
+            )
+            if probabilidad >= PROBABILIDAD_UMBRAL_SVM:
                 persona_svm = (
                     db.query(PersonaAutorizada)
                     .filter(PersonaAutorizada.id_persona == id_persona_svm)
                     .first()
                 )
                 if persona_svm is not None:
-                    mejor_persona = persona_svm
-                    mejor_similitud = probabilidad
-                    metodo_usado = "svm"
+                    similitud_svm = probabilidad
         except Exception as e_svm:
+            svm_fallo = True
             # Si el SVM falla por cualquier razón, caer al coseno
             registrar_log(
                 db,
@@ -530,11 +647,49 @@ async def identificar_rostro(
             )
 
     # ── Intento 2: Búsqueda coseno (fallback / modo prueba rápida) ───────────
-    if metodo_usado == "coseno":
-        mejor_persona, mejor_similitud = _identificar_por_coseno(db, embedding_nuevo)
+    usar_coseno = (
+        modo_normalizado == "coseno"
+        or artefacto_svm is None
+        or modo_normalizado == "auto"
+        or (modo_normalizado == "svm" and persona_svm is None)
+    )
+    if usar_coseno:
+        persona_coseno, similitud_coseno = _identificar_por_coseno(db, embedding_nuevo)
+
+    if modo_normalizado == "svm":
+        if persona_svm is not None:
+            mejor_persona = persona_svm
+            mejor_similitud = similitud_svm
+            metodo_usado = "svm"
+            umbral_usado = PROBABILIDAD_UMBRAL_SVM
+    elif modo_normalizado == "coseno":
+        if persona_coseno is not None:
+            mejor_persona = persona_coseno
+            mejor_similitud = similitud_coseno
+            metodo_usado = "coseno"
+            umbral_usado = SIMILITUD_UMBRAL_COSENO
+    elif modo_normalizado == "svm":
+        # Si SVM no supera el umbral, no se cae a coseno: el modo svm debe ser estricto.
+        if persona_svm is not None:
+            mejor_persona = persona_svm
+            mejor_similitud = similitud_svm
+            metodo_usado = "svm"
+            umbral_usado = PROBABILIDAD_UMBRAL_SVM
+    else:
+        candidatos: list[tuple[str, float, PersonaAutorizada, float]] = []
+        if persona_svm is not None:
+            candidatos.append(("svm", similitud_svm, persona_svm, PROBABILIDAD_UMBRAL_SVM))
+        if persona_coseno is not None:
+            candidatos.append(("coseno", similitud_coseno, persona_coseno, SIMILITUD_UMBRAL_COSENO))
+
+        if candidatos:
+            metodo_usado, mejor_similitud, mejor_persona, umbral_usado = max(
+                candidatos,
+                key=lambda item: item[1],
+            )
 
     # ── Clasificar resultado ──────────────────────────────────────────────────
-    if mejor_persona and mejor_similitud >= SIMILITUD_UMBRAL:
+    if mejor_persona and mejor_similitud >= umbral_usado:
         tipo_acceso = "Autorizado"
         id_persona = mejor_persona.id_persona
     else:
@@ -596,7 +751,8 @@ async def identificar_rostro(
         mensaje=(
             f"Evento de acceso generado. tipo={tipo_acceso}, "
             f"id_persona={id_persona}, camara={id_camara}, "
-            f"similitud={round(mejor_similitud, 4)}, metodo={metodo_usado}, modo={modo_normalizado}"
+            f"similitud={round(mejor_similitud, 4)}, "
+            f"metodo={metodo_usado}, modo={modo_normalizado}, umbral={round(umbral_usado, 4)}"
         ),
     )
 

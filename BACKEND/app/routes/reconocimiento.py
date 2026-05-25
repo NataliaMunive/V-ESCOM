@@ -3,11 +3,13 @@ Router del módulo de reconocimiento facial.
 Todas las rutas requieren autenticación JWT (admin).
 """
 from typing import List, Optional, Union, Dict
+import threading
+import asyncio
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.bd import get_db
+from app.bd import get_db, SessionLocal
 from app.core.deps import get_current_admin
 from app.models.administrador import Administrador
 from app.models.evento import EventoAcceso
@@ -15,10 +17,15 @@ from app.schemas.reconocimiento_schema import (
     CrearPersonaAutorizada,
     DatosEvento,
     DatosPersonaAutorizada,
+    ResultadoEntrenamiento,
     ResultadoReconocimiento,
+    ResultadoSubidaMultiple,
     UpdPersonaAutorizada,
 )
-from app.services import reconocimiento_service
+from app.services import entrenamiento_service, reconocimiento_service
+from app.services.websocket_manager import alertas_ws_manager
+import traceback
+import time
 
 router = APIRouter(prefix="/reconocimiento", tags=["Reconocimiento Facial"])
 
@@ -126,6 +133,47 @@ async def registrar_rostro(
     return await reconocimiento_service.registrar_rostro(
         db, id_persona, imagen, forzar=forzar
     )
+
+
+@router.post(
+    "/personas/{id_persona}/rostros",
+    response_model=ResultadoSubidaMultiple,
+    summary="Subir múltiples fotos y generar embeddings",
+)
+async def registrar_rostros_multiples(
+    id_persona: int,
+    imagenes: List[UploadFile] = File(
+        ...,
+        description="Lista de fotos del rostro (JPEG/PNG, idealmente distintos ángulos)",
+    ),
+    forzar: bool = Query(
+        False,
+        description=(
+            "Si es true, omite verificación de duplicados por cada imagen y guarda "
+            "los embeddings aunque exista una persona similar."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    _: Administrador = Depends(get_current_admin),
+):
+    if not imagenes:
+        raise HTTPException(status_code=422, detail="Debes enviar al menos una imagen.")
+
+    resultado = await reconocimiento_service.registrar_multiples_rostros(
+        db=db,
+        id_persona=id_persona,
+        imagenes=imagenes,
+        forzar=forzar,
+    )
+    if resultado.exitosas == 0:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "mensaje": "No se pudo registrar ninguna imagen del lote.",
+                "resultado": resultado.model_dump(),
+            },
+        )
+    return resultado
  
 
 
@@ -151,6 +199,61 @@ def recargar_modelo(
     if cargado:
         return {"modelo": "svm", "estado": "cargado", "ruta": str(reconocimiento_service._RUTA_MODELO_SVM)}
     return {"modelo": "coseno", "estado": "sin_modelo", "mensaje": "No se encontró el archivo .joblib. Usa el método coseno."}
+
+
+@router.post(
+    "/entrenar",
+    response_model=ResultadoEntrenamiento,
+    summary="Entrenar clasificador SVM con embeddings de la BD",
+)
+@router.post(
+    "/entrenar",
+    summary="Entrenar clasificador SVM con embeddings de la BD (asíncrono, notifica por WebSocket)",
+)
+def entrenar_modelo(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: Administrador = Depends(get_current_admin),
+):
+    """
+    Lanza el entrenamiento en background y responde inmediatamente.
+
+    El worker en background ejecuta `ejecutar_entrenamiento`, fuerza la recarga
+    del modelo SVM y envía via WebSocket el evento
+    `{type: 'entrenamiento_completado', data: resultado}` cuando termina.
+    """
+
+    def _worker():
+        db_bg = SessionLocal()
+        start = time.time()
+        try:
+            try:
+                resultado = entrenamiento_service.ejecutar_entrenamiento(db_bg)
+                # Forzar recarga del modelo en este proceso
+                reconocimiento_service.recargar_modelo_svm()
+                resultado_ok = True
+            except Exception as ex:
+                resultado_ok = False
+                tb = traceback.format_exc()
+                resultado = {"error": str(ex), "mensaje": "Fallo durante el entrenamiento", "traceback": tb[:4000]}
+
+            # Añadir metadatos temporales
+            resultado["timestamp"] = int(time.time())
+            resultado["duration_seconds"] = round(time.time() - start, 2)
+
+            payload = {"type": "entrenamiento_completado", "data": resultado}
+            try:
+                # Ejecutar broadcast en un loop nuevo (estamos en hilo separado)
+                asyncio.run(alertas_ws_manager.broadcast_json(payload))
+            except Exception:
+                # Si falla el broadcast no interrumpimos el worker
+                pass
+        finally:
+            db_bg.close()
+
+    # Encolar el inicio del hilo para que se dispare una vez que la respuesta haya sido enviada
+    background_tasks.add_task(threading.Thread(target=_worker, daemon=True).start)
+    return {"mensaje": "Entrenamiento iniciado"}
 
 
 @router.get(

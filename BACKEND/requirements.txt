@@ -36,6 +36,8 @@ onnxruntime
 onnxruntime-directml
 opencv-python-headless
 numpy
+scikit-learn
+joblib
 
 # ── Notificaciones ─────────────────────────────────────────────────────────────
 twilio

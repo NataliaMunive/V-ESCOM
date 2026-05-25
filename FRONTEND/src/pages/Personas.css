@@ -7,6 +7,14 @@
   margin-bottom: 24px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .page-title { font-size: 26px; font-weight: 700; color: var(--texto); letter-spacing: -0.3px; }
 .page-sub { font-size: 13px; color: var(--texto-muted); margin-top: 4px; }
 
@@ -139,6 +147,12 @@
   display: block;
 }
 
+.btn-accion-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--texto);
+}
+
 .acciones .btn-accion[title="Ver perfil"] {
   border-color: rgba(0, 194, 224, 0.25);
 }
@@ -235,6 +249,138 @@
 .modal-close:hover { background: var(--fondo-card2); color: var(--texto); }
 
 .modal-form { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+.modal-helper {
+  font-size: 13px;
+  color: var(--texto-suave);
+  line-height: 1.5;
+}
+
+.input-multifoto {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radio);
+  border: 1px dashed var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.input-multifoto::file-selector-button {
+  margin-right: 12px;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--azul-ipn), var(--azul-claro));
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lote-resumen {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.lote-kpis {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.lote-kpis strong {
+  color: var(--texto);
+}
+
+.lote-lista {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.lote-item {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--fondo-card2);
+}
+
+.lote-ok {
+  border-color: rgba(45,198,83,0.25);
+}
+
+.lote-error {
+  border-color: rgba(230,57,70,0.25);
+}
+
+.lote-duplicado {
+  border-color: rgba(0,194,224,0.25);
+}
+
+.lote-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.lote-item-top strong {
+  font-size: 13px;
+  color: var(--texto);
+}
+
+.lote-item-top span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--texto-muted);
+}
+
+.lote-item-detail {
+  font-size: 13px;
+  color: var(--texto-suave);
+  line-height: 1.45;
+}
+
+.lote-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.lote-preview-card {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--fondo-card2);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lote-preview-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #0c1220;
+}
+
+.lote-preview-name {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--texto-suave);
+  word-break: break-word;
+}
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 

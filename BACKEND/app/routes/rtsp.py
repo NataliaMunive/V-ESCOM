@@ -3,6 +3,7 @@ Router de Gestión de Streams RTSP - V-ESCOM (CU06)
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import Response, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from typing import Optional
 import asyncio
@@ -20,6 +21,35 @@ from pydantic import BaseModel
 
 log = logging.getLogger("rtsp_routes")
 router = APIRouter(prefix="/rtsp", tags=["RTSP / Captura Continua"])
+
+
+def _prevalidar_rtsp(rtsp_url: str, timeout_ms: int = 6000) -> tuple[bool, str]:
+    """
+    Verifica rápidamente si la URL RTSP puede abrirse antes de iniciar el worker.
+    Evita esperar los reintentos largos del ciclo principal para errores de credenciales/URL.
+    """
+    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+
+    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)  # type: ignore
+    try:
+        # Algunos backends de OpenCV soportan estos timeouts; si no, simplemente se ignoran.
+        if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms)  # type: ignore
+        if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, timeout_ms)  # type: ignore
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # type: ignore
+
+        if not cap.isOpened():
+            return False, "No se pudo abrir el stream RTSP."
+
+        # Intentar leer un frame confirma autenticación + path de stream + decodificación básica.
+        ret, _frame = cap.read()
+        if not ret:
+            return False, "La conexión abrió pero no entregó frames."
+
+        return True, "ok"
+    finally:
+        cap.release()
 
 
 def _marcar_camara_activa(db: Session, id_camara: int) -> None:
@@ -59,6 +89,19 @@ async def iniciar_stream(
             stream=payload.stream,
         )
     log.info(f"URL RTSP que se usará: {rtsp_url}")
+
+    ok, detalle = await run_in_threadpool(_prevalidar_rtsp, rtsp_url)
+    if not ok:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Falló la validación previa del stream. "
+                f"Detalle: {detalle} "
+                "Verifica usuario/contraseña (incluyendo mayúsculas), "
+                "URL codificada (%21 para '!') y stream (stream1/stream2)."
+            ),
+        )
+
     from app.core.security import create_access_token
     token = create_access_token({"sub": str(admin.id_admin), "email": admin.email})
     rtsp_manager.set_token(token)
@@ -157,29 +200,24 @@ async def mjpeg_stream(
         Lee ultimo_jpg del worker directamente.
         NO abre conexión RTSP — evita conflicto con el worker de captura.
         """
-        ultimo_enviado = None
-        sin_frame = 0
-
         try:
             while worker.activo:
                 jpg = worker.ultimo_jpg
 
-                if jpg is not None and jpg is not ultimo_enviado:
-                    ultimo_enviado = jpg
-                    sin_frame = 0
-                    yield (
-                        b"--frame\r\n"
-                        b"Content-Type: image/jpeg\r\n\r\n"
-                        + jpg
-                        + b"\r\n"
-                    )
-                else:
-                    sin_frame += 1
-                    if sin_frame > 150:  # ~10s sin frames nuevos
-                        log.warning(f"[MJPEG Cam#{id_camara}] Sin frames nuevos, cerrando")
-                        break
+                if jpg is None:
+                    await asyncio.sleep(0.05)
+                    continue
 
-                await asyncio.sleep(0.067)  # ~15 fps
+                # Reenviar el último frame disponible mantiene la conexión viva
+                # y evita flashes negros cuando el stream se queda sin un frame nuevo.
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n"
+                    + jpg
+                    + b"\r\n"
+                )
+
+                await asyncio.sleep(0.05)  # ~20 fps máximo de refresco visual
 
         except (asyncio.CancelledError, GeneratorExit):
             pass
@@ -191,6 +229,7 @@ async def mjpeg_stream(
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Accel-Buffering": "no",
             "Pragma": "no-cache",
             "Expires": "0",
         }

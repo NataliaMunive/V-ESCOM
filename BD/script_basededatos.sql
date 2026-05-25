@@ -186,19 +186,29 @@ CREATE INDEX IF NOT EXISTS idx_logs_sistema_fecha
 
 -- -----------------------------------------------------
 -- Administrador inicial
--- Email: admin@ipn.mx
 -- Contraseña: Admin123!
 -- -----------------------------------------------------
 
 INSERT INTO administradores (nombre, apellidos, email, telefono, contrasena, activo, intentos_fallidos)
-VALUES (
-    'Admin',
-    'Principal',
-    'admin@ipn.mx',
-    '+521234567890',
-    '$2b$12$I9a.XUiOYFs01rzl.jGTzutBDgTgBujUENpWO/0ojDrvIxYWr4BS.',
-    true,
-    0
-)
+VALUES 
+    -- Administrador 1
+    (
+        'Erika Natalia',
+        'Munive Hernández',
+        'emuniveh1800@alumno.ipn.mx',
+        '+525514716130',
+        '$2b$12$I9a.XUiOYFs01rzl.jGTzutBDgTgBujUENpWO/0ojDrvIxYWr4BS.',
+        true,
+        0
+    ),
+    -- Administrador 2
+    (
+        'Adrian',
+        'Vargas Linares',
+        'avargasl1800@alumno.ipn.mx',
+        '+525516552046',
+        '$2b$12$I9a.XUiOYFs01rzl.jGTzutBDgTgBujUENpWO/0ojDrvIxYWr4BS.',
+        true,
+        0
+    )
 ON CONFLICT (email) DO NOTHING;
-

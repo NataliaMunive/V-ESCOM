@@ -11,11 +11,8 @@ api.interceptors.request.use((c) => {
   return c
 })
 
-const iniciarStream  = (p)  => api.post('/rtsp/iniciar', p)
 const detenerStream  = (id) => api.delete(`/rtsp/detener/${id}`)
 const estadoStreams   = ()   => api.get('/rtsp/estado')
-const getSnapshot    = (id) =>
-  `${window.location.protocol}//${window.location.hostname}:8000/rtsp/snapshot/${id}?t=${Date.now()}&token=${localStorage.getItem('vescom_token')}`
 
 const tipoColor = (tipo) =>
   tipo === 'Autorizado' ? 'var(--verde-ok)' : tipo === 'No Autorizado' ? 'var(--rojo-alerta)' : 'var(--texto-muted)'
@@ -27,10 +24,41 @@ const hace = (ts) => {
   return `hace ${Math.floor(diff / 60)}m`
 }
 
-// ── Visor de snapshot con auto-refresh ──────────────────────────────────────
-function SnapshotViewer({ idCamara, activo }) {
+// ── Visor MJPEG continuo ────────────────────────────────────────────────────
+function SnapshotViewer({ idCamara, activo, ultimoFrameTs }) {
   const token = localStorage.getItem('vescom_token')
-  const mjpegUrl = `http://localhost:8000/rtsp/mjpeg/${idCamara}?token=${token}`
+  const [nonce, setNonce] = useState(0)
+  const staleRef = useRef(null)
+
+  useEffect(() => {
+    if (!activo) {
+      setNonce(0)
+      if (staleRef.current) {
+        clearTimeout(staleRef.current)
+        staleRef.current = null
+      }
+      return undefined
+    }
+
+    if (staleRef.current) {
+      clearTimeout(staleRef.current)
+      staleRef.current = null
+    }
+
+    staleRef.current = setTimeout(() => {
+      setNonce((value) => value + 1)
+    }, 12000)
+
+    return () => {
+      if (staleRef.current) {
+        clearTimeout(staleRef.current)
+        staleRef.current = null
+      }
+    }
+  }, [activo, idCamara, ultimoFrameTs])
+
+  const baseUrl = `${window.location.protocol}//${window.location.hostname}:8000`
+  const mjpegUrl = `${baseUrl}/rtsp/mjpeg/${idCamara}?token=${encodeURIComponent(token || '')}&v=${nonce}`
 
   if (!activo) return (
     <div className="snapshot-placeholder">
@@ -42,13 +70,11 @@ function SnapshotViewer({ idCamara, activo }) {
   return (
     <div className="snapshot-wrap">
       <img
-        key={mjpegUrl}
+        key={`${idCamara}-${nonce}`}
         src={mjpegUrl}
         alt="Vista de cámara"
         className="snapshot-img"
-        onError={(e) => {
-          e.target.style.display = 'none'
-        }}
+        onError={() => {}}
       />
       <div className="snapshot-badge">EN VIVO</div>
     </div>
@@ -59,12 +85,8 @@ function SnapshotViewer({ idCamara, activo }) {
 export default function CamarasStream() {
   const [camaras, setCamaras]         = useState([])
   const [workers, setWorkers]         = useState([])
-  const [modal, setModal]             = useState(null)
-  const [form, setForm]               = useState({ rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' })
   const [cargando, setCargando]       = useState(true)
   const [accionando, setAccionando]   = useState(null)
-  const [error, setError]             = useState('')
-  const [mostrarPass, setMostrarPass] = useState(false)
   const pollRef                       = useRef(null)
 
   useEffect(() => {
@@ -99,23 +121,6 @@ export default function CamarasStream() {
 
     return String(a.nombre || '').localeCompare(String(b.nombre || ''))
   })
-
-  const abrirModal = (cam) => {
-    setModal(cam.id_camara)
-    setForm({ rtsp_user: 'adminadmin', rtsp_pass: '', stream: 'stream2' })
-    setError('')
-  }
-
-  const handleIniciar = async () => {
-    setAccionando(modal); setError('')
-    try {
-      await iniciarStream({ id_camara: modal, ...form })
-      setModal(null)
-      setTimeout(refrescarWorkers, 1200)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al iniciar stream')
-    } finally { setAccionando(null) }
-  }
 
   const handleDetener = async (id) => {
     setAccionando(id)
@@ -169,7 +174,11 @@ export default function CamarasStream() {
                 className={`stream-card ${vivo ? 'stream-card-on' : ''} ${!cam.activa ? 'stream-card-disabled' : ''}`}>
 
                 {/* Vista de cámara */}
-                <SnapshotViewer idCamara={cam.id_camara} activo={vivo} />
+                <SnapshotViewer
+                  idCamara={cam.id_camara}
+                  activo={vivo}
+                  ultimoFrameTs={w?.ultimo_frame_ts}
+                />
 
                 {/* Info */}
                 <div className="sc-body">
@@ -218,99 +227,15 @@ export default function CamarasStream() {
                         {accionando === cam.id_camara ? '...' : '⏹ Detener'}
                       </button>
                     ) : (
-                      <button className="sc-btn sc-btn-start"
-                        onClick={() => abrirModal(cam)}
-                        disabled={!cam.activa || accionando === cam.id_camara}>
-                        {accionando === cam.id_camara ? '...' : '▶ Iniciar stream'}
-                      </button>
+                      <div className="stream-note">
+                        Inicia la cámara desde <strong>Cámaras</strong> para verla aquí.
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
             )
           })}
-        </div>
-      )}
-
-      {/* Modal */}
-      {modal !== null && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Configurar stream RTSP</h3>
-              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              {(() => {
-                const cam = camaras.find(c => c.id_camara === modal)
-                return cam ? (
-                  <div className="modal-cam-info">
-                    <span className="mci-nombre">{cam.nombre}</span>
-                    {cam.direccion_ip && (
-                      <code className="mci-ip">
-                        {cam.direccion_ip.startsWith('rtsp://') || cam.direccion_ip.startsWith('rtsps://') || cam.direccion_ip.startsWith('http://') || cam.direccion_ip.startsWith('https://') || cam.direccion_ip === '0'
-                          ? cam.direccion_ip
-                          : `${cam.direccion_ip}:554`
-                        }
-                      </code>
-                    )}
-                  </div>
-                ) : null
-              })()}
-              <div className="field">
-                <label>Usuario de la cámara</label>
-                <input value={form.rtsp_user}
-                  onChange={e => setForm(f => ({ ...f, rtsp_user: e.target.value }))}
-                  placeholder="adminadmin" />
-              </div>
-              <div className="field">
-                <label>Contraseña RTSP</label>
-                <div className="pass-wrap">
-                  <input type={mostrarPass ? 'text' : 'password'}
-                    value={form.rtsp_pass}
-                    onChange={e => setForm(f => ({ ...f, rtsp_pass: e.target.value }))}
-                    placeholder="Contraseña de la app MERCUSYS" />
-                  <button type="button" className="pass-toggle"
-                    onClick={() => setMostrarPass(v => !v)}
-                    aria-label={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
-                    <img src={mostrarPass ? '/icons/desactivar.svg' : '/icons/ver.svg'} alt={mostrarPass ? 'Ocultar' : 'Mostrar'} />
-                  </button>
-                </div>
-              </div>
-              <div className="field">
-                <label>Calidad del stream</label>
-                <select value={form.stream}
-                  onChange={e => setForm(f => ({ ...f, stream: e.target.value }))}>
-                  <option value="stream2">stream2 — 720p (recomendado)</option>
-                  <option value="stream1">stream1 — 2K 3MP</option>
-                </select>
-              </div>
-              {(() => {
-                const cam = camaras.find(c => c.id_camara === modal)
-                if (!cam?.direccion_ip) return null
-                const fuente = cam.direccion_ip
-                const u = fuente.startsWith('rtsp://') || fuente.startsWith('rtsps://') || fuente.startsWith('http://') || fuente.startsWith('https://') || fuente === '0'
-                  ? fuente
-                  : form.rtsp_pass
-                    ? `rtsp://${form.rtsp_user}:****@${fuente}:554/${form.stream}`
-                    : `rtsp://${fuente}:554/${form.stream}`
-                return (
-                  <div className="url-preview">
-                    <span className="url-preview-label">URL resultante</span>
-                    <code>{u}</code>
-                  </div>
-                )
-              })()}
-              {error && <div className="form-error">⚠ {error}</div>}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleIniciar}
-                disabled={accionando === modal}>
-                {accionando === modal ? 'Conectando...' : '▶ Iniciar captura'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

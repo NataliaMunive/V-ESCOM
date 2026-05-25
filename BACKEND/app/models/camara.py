@@ -24,8 +24,8 @@ class Camara(Base):
     # Nombre descriptivo (ej. 'Cámara Acceso Principal')
     nombre = Column(String, nullable=False)
     
-    # Dirección IPv4 o IPv6 para la conexión con el stream de video
-    direccion_ip = Column(String(45), nullable=True)
+    # Dirección IPv4/URL del stream (admite RTSP con credenciales y paths largos)
+    direccion_ip = Column(String(255), nullable=True)
     
     # Descripción física del lugar donde está instalada
     ubicacion = Column(String)

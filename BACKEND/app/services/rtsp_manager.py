@@ -12,7 +12,7 @@ import queue
 import threading
 import time
 from typing import Dict, Optional
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import cv2
 
@@ -21,6 +21,8 @@ log = logging.getLogger("rtsp_manager")
 INTERVALO_SEG  = float(os.getenv("RTSP_INTERVALO_SEG", "1"))
 MAX_REINTENTOS = int(os.getenv("RTSP_REINTENTOS", "5"))
 ESPERA_RETRY   = 8
+JPEG_QUALITY   = int(os.getenv("RTSP_JPEG_QUALITY", "55"))
+SIN_FRAME_TIMEOUT = float(os.getenv("RTSP_SIN_FRAME_TIMEOUT", "6"))
 
 
 def _primer_valor_no_vacio(*valores: Optional[str], default: str = "") -> str:
@@ -38,6 +40,36 @@ def _es_fuente_directa(valor: str) -> bool:
     return valor.startswith(("rtsp://", "rtsps://", "http://", "https://")) or valor == "0"
 
 
+def _normalizar_rtsp_con_credenciales(url: str) -> str:
+    """
+    Normaliza URLs RTSP con credenciales para evitar fallos por caracteres especiales
+    (ej. !, @, :, espacios) en OpenCV/FFmpeg.
+    """
+    url = str(url).strip()
+    if not url.lower().startswith(("rtsp://", "rtsps://")):
+        return url
+
+    try:
+        partes = urlsplit(url)
+        # Si no hay credenciales embebidas, se devuelve tal cual.
+        if partes.username is None or partes.password is None:
+            return url
+
+        usuario = quote(unquote(partes.username), safe="")
+        contrasena = quote(unquote(partes.password), safe="")
+
+        netloc = f"{usuario}:{contrasena}@{partes.hostname or ''}"
+        if partes.port:
+            netloc = f"{netloc}:{partes.port}"
+
+        return urlunsplit(
+            (partes.scheme, netloc, partes.path, partes.query, partes.fragment)
+        )
+    except Exception:
+        # Ante cualquier parseo inesperado, usar valor original y evitar romper flujo.
+        return url
+
+
 def construir_rtsp_url(
     fuente: str,
     user: Optional[str] = None,
@@ -46,7 +78,7 @@ def construir_rtsp_url(
 ) -> str:
     fuente = str(fuente).strip()
     if _es_fuente_directa(fuente):
-        return fuente
+        return _normalizar_rtsp_con_credenciales(fuente)
 
     usuario = _primer_valor_no_vacio(user)
     contrasena = _primer_valor_no_vacio(pwd)
@@ -73,11 +105,11 @@ def resolver_rtsp_url_camara(
 
     fuente = str(fuente).strip()
     if _es_fuente_directa(fuente):
-        return fuente
+        return _normalizar_rtsp_con_credenciales(fuente)
 
     url_especifica = _primer_valor_no_vacio(os.getenv(f"RTSP_URL_{id_camara}"))
     if url_especifica:
-        return url_especifica
+        return _normalizar_rtsp_con_credenciales(url_especifica)
 
     usuario_final = _primer_valor_no_vacio(
         user,
@@ -128,6 +160,7 @@ class CameraWorker:
         self.activo               = False
         self.ultimo_resultado: Optional[dict] = None
         self.ultimo_frame_ts: float = 0.0
+        self._ultimo_frame_monotonic: float = 0.0
         self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
         self._capture_thread: Optional[threading.Thread] = None
         self._analysis_task: Optional[asyncio.Task] = None
@@ -156,6 +189,7 @@ class CameraWorker:
 
             reintentos = 0
             ultimo_analisis = 0.0
+            self._ultimo_frame_monotonic = time.monotonic()
             log.info(f"[Cam#{self.id_camara}] ✓ Stream abierto")
 
             while self.activo:
@@ -166,7 +200,7 @@ class CameraWorker:
 
                 try:
                     ok, buf = cv2.imencode(  # type: ignore
-                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70]
+                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
                     )
                     if not ok:
                         continue
@@ -174,6 +208,7 @@ class CameraWorker:
 
                     # Siempre actualizar ultimo_jpg para el MJPEG (sin límite de tiempo)
                     self.ultimo_jpg = jpg
+                    self._ultimo_frame_monotonic = time.monotonic()
 
                     # Solo enviar a la queue de análisis cada INTERVALO_SEG
                     ahora = time.monotonic()
@@ -188,6 +223,15 @@ class CameraWorker:
 
                 except Exception as e:
                     log.debug(f"[Cam#{self.id_camara}] Error encode: {e}")
+
+                # Si el stream deja de producir frames durante varios segundos,
+                # reconectamos para evitar que la vista quede trabada.
+                if time.monotonic() - self._ultimo_frame_monotonic >= SIN_FRAME_TIMEOUT:
+                    log.warning(
+                        f"[Cam#{self.id_camara}] Sin frames nuevos durante "
+                        f"{SIN_FRAME_TIMEOUT:.1f}s, reconectando..."
+                    )
+                    break
 
             cap.release()
             if self.activo:
