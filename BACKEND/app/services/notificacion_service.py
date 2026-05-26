@@ -1,31 +1,33 @@
+# app/services/notificacion_service.py
 import os
-import requests
-from dotenv import load_dotenv
+import requests # O la librería que uses para Telegram
 
-load_dotenv()
-
-def enviar_alerta_telegram(mensaje: str, ruta_imagen: str = None):
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+def enviar_alerta_telegram(mensaje: str, ruta_imagen: str = None, chat_id: str = None):
+    """
+    Envía un mensaje a Telegram. 
+    Si chat_id es proporcionado, se envía a ese usuario.
+    Si no, usa el ID por defecto del .env.
+    """
+    # Usamos el chat_id que recibimos, o si es None, el del .env
     target_chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+    token = os.getenv("TELEGRAM_TOKEN")
     
-    # URL base para la API de Telegram
-    base_url = f"https://api.telegram.org/bot{token}"
+    if not target_chat_id or not token:
+        print("Error: Falta configurar TELEGRAM_TOKEN o el chat_id es inválido")
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
+    # Aquí va tu lógica para enviar el mensaje con requests o la librería que uses
+    # Ejemplo básico:
+    payload = {
+        "chat_id": target_chat_id,
+        "text": mensaje
+    }
     
     try:
-        # Si hay una imagen, enviamos una foto
-        if ruta_imagen and os.path.exists(ruta_imagen):
-            url = f"{base_url}/sendPhoto"
-            files = {'photo': open(ruta_imagen, 'rb')}
-            data = {'chat_id': chat_id, 'caption': mensaje}
-            response = requests.post(url, data=data, files=files)
-        else:
-            # Si es solo texto
-            url = f"{base_url}/sendMessage"
-            data = {'chat_id': chat_id, 'text': mensaje}
-            response = requests.post(url, data=data)
-            
+        response = requests.post(url, json=payload)
         return response.status_code == 200
     except Exception as e:
-        print(f"Error enviando a Telegram: {e}")
+        print(f"Error en envío Telegram: {e}")
         return False
