@@ -3,7 +3,7 @@ import { getAdmins, crearAdmin, actualizarAdmin, desactivarAdmin } from '../serv
 import { useAuth } from '../context/AuthContext'
 import './Administradores.css'
 
-const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', contrasena: '' }
+const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', contrasena: '', telegram_chat_id: '' }
 
 export default function Administradores() {
   const { admin: adminActual } = useAuth()
@@ -29,7 +29,14 @@ export default function Administradores() {
 
   const abrirEditar = (a) => {
     setSeleccionado(a)
-    setForm({ nombre: a.nombre, apellidos: a.apellidos, email: a.email, telefono: a.telefono || '', contrasena: '' })
+    setForm({ 
+        nombre: a.nombre, 
+        apellidos: a.apellidos, 
+        email: a.email, 
+        telefono: a.telefono || '', 
+        contrasena: '',
+        telegram_chat_id: a.telegram_chat_id || '' 
+    })
     setError(''); setMostrarPass(false); setModal('editar')
   }
 
@@ -168,8 +175,14 @@ export default function Administradores() {
                 <label>Teléfono</label>
                 <input name="telefono" value={form.telefono} onChange={handleChange} placeholder="55 1234 5678" />
               </div>
+              {/* CAMPO DE TELEGRAM INTEGRADO */}
               <div className="field">
-                <label>{modal === 'crear' ? 'Contraseña *' : 'Nueva contraseña (dejar vacío para no cambiar)'}</label>
+                <label>ID de Telegram</label>
+                <input name="telegram_chat_id" value={form.telegram_chat_id} onChange={handleChange} placeholder="Ej: 123456789" />
+                <small style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>Obtén tu ID escribiendo /start a @userinfobot</small>
+              </div>
+              <div className="field">
+                <label>{modal === 'crear' ? 'Contraseña *' : 'Nueva contraseña'}</label>
                 <div className="pass-wrap">
                   <input
                     name="contrasena"
@@ -177,19 +190,16 @@ export default function Administradores() {
                     value={form.contrasena}
                     onChange={handleChange}
                     required={modal === 'crear'}
-                    placeholder="Mínimo 8 caracteres"
                   />
                   <button type="button" className="pass-toggle" onClick={() => setMostrarPass(v => !v)}>
-                    <img src={mostrarPass ? '/icons/desactivar.svg' : '/icons/ver.svg'} alt={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'} />
+                    <img src={mostrarPass ? '/icons/desactivar.svg' : '/icons/ver.svg'} alt="ver" />
                   </button>
                 </div>
               </div>
               {error && <div className="form-error">⚠ {error}</div>}
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={cerrar}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={guardando}>
-                  {guardando ? 'Guardando...' : 'Guardar'}
-                </button>
+                <button type="submit" className="btn-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
           </div>

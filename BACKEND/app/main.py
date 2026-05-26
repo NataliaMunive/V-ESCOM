@@ -13,12 +13,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pathlib import Path
-from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas, cubiculos
+from app.routes import profesores, camaras, auth, reconocimiento, alertas, ws_alertas, cubiculos, administradores
 from app.routes import reportes
 from app.routes import stream
 from app.routes import rtsp as rtsp_routes
 from app.services.rtsp_manager import rtsp_manager
 from app.routes import capturas
+from app.routes import administradores
 
 # ─── Configuracion de la instancia ──────────────────────────────────────────────
 app = FastAPI(
@@ -54,6 +55,7 @@ app.include_router(reportes.router)
 app.include_router(stream.router)
 app.include_router(rtsp_routes.router)
 app.include_router(capturas.router)
+app.include_router(administradores.router)
 rtsp_manager.inicializar(app)  
 
 fotos_path = Path(__file__).resolve().parent.parent / "fotos_rostros"

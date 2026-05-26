@@ -1,21 +1,3 @@
-"""
-Servicio de reconocimiento facial.
-Flujo:
-  1. Registrar embedding de una persona autorizada (subiendo foto).
-  2. Identificar un rostro contra la BD → retorna evento de acceso.
-
-Umbral de similitud: 0.40 (configurable en .env como SIMILITUD_UMBRAL).
-Con ArcFace normalizado, valores >0.4 indican la misma persona.
-
-Manejo de eventos:
-    - Si no autorizado, se registra en EventoAcceso y PersonaNoAutorizada.
-    - Se envía notificación de intrusión a administradores activos con teléfono registrado.
-
-Manejo de errores:
-    - 404 si la persona no existe al registrar rostro.
-    - 422 para errores en extracción de embedding (ej. imagen sin rostro).
-    - En caso de error en notificación, se registra el evento pero se omite el envío de SMS.
-"""
 from __future__ import annotations
 
 import os
@@ -32,6 +14,7 @@ from app.models.evento import EventoAcceso, PersonaNoAutorizada
 from app.models.persona_autorizada import PersonaAutorizada
 from app.models.profesor import Profesor
 from app.models.rostro_autorizado import RostroAutorizado
+from app.models.administrador import Administrador  # Importación clave
 from app.schemas.reconocimiento_schema import (
     CrearPersonaAutorizada,
     DatosPersonaAutorizada,
@@ -47,6 +30,11 @@ from app.services.log_sistema_service import registrar_log
 from app.services.websocket_manager import alertas_ws_manager
 from app.utils.face_utils import bytes_a_bgr, detectar_rostros, extraer_embedding
 from app.utils.phone_utils import normalizar_telefono_mx
+
+# ─── Control de Notificaciones (Throttling) ──────────────────────────────────
+_contador_intrusos_por_camara: dict[int, int] = {}
+LIMITE_DETECCIONES_NOTIFICACION = int(os.getenv("LIMITE_DETECCIONES_NOTIFICACION", "10"))
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Umbrales por método:
 # - SVM: probabilidad del clasificador (recomendado >= 0.60)
@@ -73,15 +61,6 @@ _modelo_svm_mtime: float | None = None
 
 
 def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
-    """Carga el modelo SVM desde disco (singleton).
-
-    Devuelve el artefacto {'pipeline', 'codificador_etiquetas', ...}
-    o None si el archivo no existe todavía.
-
-    Args:
-        forzar_recarga: Si True, descarta la caché y recarga desde disco.
-                        Útil después de un reentrenamiento.
-    """
     global _modelo_svm_cache, _modelo_svm_cargado, _modelo_svm_mtime
 
     if forzar_recarga:
@@ -89,14 +68,12 @@ def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
         _modelo_svm_cargado = False
         _modelo_svm_mtime = None
 
-    # Si ya estaba cargado, validar si el archivo en disco cambió (multi-worker friendly).
     if _modelo_svm_cargado and not forzar_recarga:
         if _RUTA_MODELO_SVM.exists():
             try:
                 mtime_actual = _RUTA_MODELO_SVM.stat().st_mtime
                 if _modelo_svm_mtime is not None and mtime_actual <= _modelo_svm_mtime:
                     return _modelo_svm_cache if _modelo_svm_cache else None
-                # El archivo cambió: invalidar cache para forzar recarga en este worker.
                 _modelo_svm_cache = {}
                 _modelo_svm_cargado = False
                 _modelo_svm_mtime = None
@@ -105,7 +82,7 @@ def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
         else:
             return _modelo_svm_cache if _modelo_svm_cache else None
 
-    _modelo_svm_cargado = True  # marcar aunque falle, para no reintentar en cada request
+    _modelo_svm_cargado = True  
 
     if not _RUTA_MODELO_SVM.exists():
         _modelo_svm_mtime = None
@@ -115,11 +92,9 @@ def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
         import joblib
         artefacto = joblib.load(_RUTA_MODELO_SVM)
         _modelo_svm_mtime = _RUTA_MODELO_SVM.stat().st_mtime
-        # Validar que tiene las claves esperadas del nuevo script
         if "pipeline" in artefacto and "codificador_etiquetas" in artefacto:
             _modelo_svm_cache = artefacto
             return _modelo_svm_cache
-        # Compatibilidad con el script antiguo (claves "modelo" y "codificador")
         if "modelo" in artefacto and "codificador" in artefacto:
             _modelo_svm_cache = {
                 "pipeline": artefacto["modelo"],
@@ -133,14 +108,7 @@ def _cargar_modelo_svm(forzar_recarga: bool = False) -> dict[str, Any] | None:
 
 
 def recargar_modelo_svm() -> bool:
-    """Fuerza la recarga del modelo SVM desde disco.
-
-    Llama esta función después de reentrenar el modelo para que el
-    servicio use la versión actualizada sin reiniciar el servidor.
-
-    Returns:
-        True si el modelo se cargó correctamente, False si no existe.
-    """
+    """Fuerza la recarga del modelo SVM desde disco."""
     artefacto = _cargar_modelo_svm(forzar_recarga=True)
     return artefacto is not None
 
@@ -149,28 +117,13 @@ def _identificar_con_svm(
     embedding: np.ndarray,
     artefacto: dict[str, Any],
 ) -> tuple[int | None, float]:
-    """Identifica un embedding usando el pipeline SVM entrenado.
-
-    Args:
-        embedding : Vector de características (512-d de ArcFace).
-        artefacto : Diccionario con 'pipeline' y 'codificador_etiquetas'.
-
-    Returns:
-        (id_persona, probabilidad_maxima)
-    """
     pipeline = artefacto["pipeline"]
     codificador = artefacto["codificador_etiquetas"]
-
-    vector = embedding.reshape(1, -1)   # forma (1, 512)
-
-    # Probabilidades para cada clase
+    vector = embedding.reshape(1, -1)
     probabilidades = pipeline.predict_proba(vector)[0]
     indice_mejor = int(np.argmax(probabilidades))
     probabilidad_mejor = float(probabilidades[indice_mejor])
-
-    # Decodificar índice → id_persona original
     id_persona = int(codificador.inverse_transform([indice_mejor])[0])
-
     return id_persona, probabilidad_mejor
 
 
@@ -178,11 +131,6 @@ def _identificar_por_coseno(
     db: Session,
     embedding_nuevo: np.ndarray,
 ) -> tuple[Optional[PersonaAutorizada], float]:
-    """Busca la mejor coincidencia en BD usando distancia coseno.
-
-    Este camino se conserva como modo rápido de prueba y como fallback
-    cuando no hay modelo SVM disponible.
-    """
     distancia = RostroAutorizado.embedding.cosine_distance(embedding_nuevo.tolist())
     coincidencia = (
         db.query(RostroAutorizado, PersonaAutorizada, distancia.label("distancia"))
@@ -194,14 +142,11 @@ def _identificar_por_coseno(
         .order_by(distancia)
         .first()
     )
-
     mejor_similitud = -1.0
     mejor_persona: Optional[PersonaAutorizada] = None
-
     if coincidencia:
         _, mejor_persona, mejor_distancia = coincidencia
         mejor_similitud = 1.0 - float(mejor_distancia)
-
     return mejor_persona, mejor_similitud
 
 
@@ -232,7 +177,6 @@ def _buscar_profesor_sincronizado(
 def _sincronizar_profesor_desde_persona(db: Session, persona: PersonaAutorizada) -> None:
     if (persona.rol or '').strip().lower() != 'profesor':
         return
-
     correo = (persona.email or '').strip() or None
     telefono = normalizar_telefono_mx(persona.telefono)
     profesor = _buscar_profesor_sincronizado(db, correo=correo, telefono=telefono)
@@ -313,7 +257,6 @@ class _BytesUpload:
     def __init__(self, contenido: bytes):
         self.filename = "rostro.jpg"
         self._contenido = contenido
-
     async def read(self) -> bytes:
         return self._contenido
 
@@ -321,7 +264,6 @@ class _BytesUpload:
 
 def crear_persona(db: Session, datos: CrearPersonaAutorizada) -> PersonaAutorizada:
     datos_dict = datos.model_dump()
-    # Normalizar email y telefono para evitar discrepancias de formato
     if datos_dict.get('email'):
         datos_dict['email'] = datos_dict['email'].strip().lower()
     if datos_dict.get('telefono'):
@@ -349,11 +291,9 @@ def crear_persona(db: Session, datos: CrearPersonaAutorizada) -> PersonaAutoriza
     db.commit()
     return nueva
 
-# Obtener todas las personas autorizadas o por ID
 def obtener_personas(db: Session):
     return db.query(PersonaAutorizada).all()
 
-# Obtener persona autorizada por ID
 def obtener_persona(db: Session, id_persona: int) -> PersonaAutorizada:
     p = db.query(PersonaAutorizada).filter(
         PersonaAutorizada.id_persona == id_persona
@@ -362,7 +302,6 @@ def obtener_persona(db: Session, id_persona: int) -> PersonaAutorizada:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
     return p
 
-# Actualizar persona autorizada por ID
 def actualizar_persona(
     db: Session, id_persona: int, datos: UpdPersonaAutorizada
 ) -> PersonaAutorizada:
@@ -385,7 +324,6 @@ def actualizar_persona(
     db.commit()
     return persona
 
-# Eliminar persona autorizada por ID (borrado físico)
 def eliminar_persona(db: Session, id_persona: int) -> None:
     persona = obtener_persona(db, id_persona)
     _desactivar_profesor_sincronizado(db, persona)
@@ -399,18 +337,11 @@ async def registrar_rostro(
     id_persona: int,
     imagen: UploadFile,
     directorio_fotos: str = "fotos_rostros",
-    forzar: bool = False,          
+    forzar: bool = False,           
 ) -> DatosPersonaAutorizada:
-    """
-    Extrae el embedding de la imagen subida y lo guarda en la BD.
-    Antes de persistir, verifica que no exista un rostro similar registrado
-    para otra persona (duplicado). Si hay coincidencia y forzar=False,
-    lanza HTTP 409 con los datos del posible duplicado.
-    """
     persona = obtener_persona(db, id_persona)
     contenido = await imagen.read()
  
-    # Extraer embedding
     try:
         embedding = await run_in_threadpool(extraer_embedding, contenido)
     except ValueError as e:
@@ -476,14 +407,12 @@ async def registrar_rostro(
                     },
                 )
  
-    # Guardar imagen en disco
     os.makedirs(directorio_fotos, exist_ok=True)
     nombre_archivo = f"{id_persona}_{imagen.filename}"
     ruta = os.path.join(directorio_fotos, nombre_archivo)
     with open(ruta, "wb") as f:
         f.write(contenido)
  
-    # Persistir embedding y ruta
     rostro = RostroAutorizado(
         id_persona=id_persona,
         embedding=embedding.tolist(),
@@ -512,13 +441,7 @@ async def registrar_multiples_rostros(
     directorio_fotos: str = "fotos_rostros",
     forzar: bool = False,
 ) -> ResultadoSubidaMultiple:
-    """Registra múltiples embeddings para una persona autorizada.
-
-    Procesa cada imagen de forma independiente para devolver un resultado por
-    archivo sin interrumpir el lote completo ante fallos parciales.
-    """
     obtener_persona(db, id_persona)
-
     resultados: list[ResultadoImagen] = []
     exitosas = 0
 
@@ -544,7 +467,6 @@ async def registrar_multiples_rostros(
             estado = "error"
             similitud = None
             detalle = "No se pudo procesar la imagen."
-
             if isinstance(exc.detail, dict):
                 detalle = str(exc.detail.get("mensaje", detalle))
                 if exc.status_code == 409:
@@ -554,7 +476,6 @@ async def registrar_multiples_rostros(
                         similitud = float(similitud_val)
             elif isinstance(exc.detail, str):
                 detalle = exc.detail
-
             resultados.append(
                 ResultadoImagen(
                     nombre_archivo=nombre_archivo,
@@ -715,6 +636,18 @@ async def _procesar_embedding_reconocimiento(
             with open(ruta_captura, "wb") as f:
                 f.write(contenido)
 
+            # --- INTEGRACIÓN TELEGRAM ---
+            try:
+                admins = db.query(Administrador).filter(Administrador.telegram_chat_id.isnot(None)).all()
+                for admin in admins:
+                    notificacion_service.enviar_alerta_telegram(
+                        mensaje=f"🚨 Intruso detectado en cámara #{id_camara or 'Desconocida'}",
+                        ruta_imagen=ruta_captura,
+                        chat_id=admin.telegram_chat_id
+                    )
+            except Exception as e_tg:
+                print(f"Error al enviar notificación de Telegram: {e_tg}")
+
             registrar_log(
                 db,
                 nivel="INFO",
@@ -755,25 +688,39 @@ async def _procesar_embedding_reconocimiento(
     db.refresh(evento)
 
     if tipo_acceso == "No Autorizado":
+        camara_key = id_camara if id_camara is not None else -1
+        _contador_intrusos_por_camara[camara_key] = _contador_intrusos_por_camara.get(camara_key, 0) + 1
+        
+        toca_enviar_sms = (_contador_intrusos_por_camara[camara_key] >= LIMITE_DETECCIONES_NOTIFICACION)
+
+        if toca_enviar_sms:
+            _contador_intrusos_por_camara[camara_key] = 0
+            mensaje_log = f"Notificación SMS disparada tras {LIMITE_DETECCIONES_NOTIFICACION} detecciones"
+        else:
+            _contador_intrusos_por_camara[camara_key] = contador_actual
+            mensaje_log = f"Detección {_contador_intrusos_por_camara[camara_key]}/{LIMITE_DETECCIONES_NOTIFICACION} guardada. SMS omitido."
+
         try:
-            alerta_ws = notificacion_service.notificar_intrusion(db, evento)
+            alerta_ws = notificacion_service.notificar_intrusion(db, evento, enviar_sms=toca_enviar_sms)
             await alertas_ws_manager.broadcast_json({
                 "type": "alerta_nueva",
                 "data": alerta_ws,
             })
+
             registrar_log(
                 db,
                 nivel="INFO",
                 origen="Motor_IA",
                 tipo="Notificacion",
                 id_evento=evento.id_evento,
-                mensaje="Notificacion de intrusion disparada correctamente",
+                mensaje=mensaje_log,
                 commit=True,
             )
+
         except Exception as e:
             import traceback
             db.rollback()
-            log_msg = f"Fallo notificacion: {e}\n{traceback.format_exc()}"
+            log_msg = f"Fallo notificacion WS/SMS: {e}\n{traceback.format_exc()}"
             print(log_msg)
             registrar_log(
                 db,
@@ -795,29 +742,12 @@ async def _procesar_embedding_reconocimiento(
     )
 
 
-# ─── Identificación ───────────────────────────────────────────────────────────
-
 async def identificar_rostro(
     db: Session,
     imagen: UploadFile,
     id_camara: Optional[int] = None,
     modo: str = "auto",
 ) -> ResultadoReconocimiento:
-    """
-    Identifica el rostro de la imagen usando el mejor método disponible:
-
-     1. Modelo SVM entrenado (si existe modelos/clasificador_svm.joblib)
-         → más preciso con múltiples fotos por persona y distintos ángulos.
-     2. Búsqueda por distancia coseno en BD (modo prueba rápida / fallback)
-         → funciona sin necesidad de reentrenamiento previo.
-
-     Parámetro `modo`:
-     - "auto": usa SVM si existe; si no, cae a coseno.
-     - "svm": fuerza el uso del modelo SVM y falla si no existe.
-     - "coseno": fuerza el modo rápido de prueba por distancia coseno.
-
-    En ambos casos registra el evento en la BD y retorna el resultado.
-    """
     contenido = await imagen.read()
 
     try:
@@ -842,11 +772,6 @@ async def identificar_rostros_multiples(
     id_camara: Optional[int] = None,
     modo: str = "auto",
 ) -> ResultadoReconocimientoMultiples:
-    """Identifica todos los rostros visibles en una imagen.
-
-    Cada rostro detectado se recorta y se procesa con el mismo flujo de
-    identificación usado para una sola cara.
-    """
     contenido = await imagen.read()
 
     try:
@@ -901,33 +826,4 @@ async def identificar_rostros_multiples(
     return ResultadoReconocimientoMultiples(
         total_detectados=len(rostros),
         resultados=resultados,
-    )
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _a_schema(persona: PersonaAutorizada, db: Optional[Session] = None) -> DatosPersonaAutorizada:
-    tiene_embedding = False
-    if db is not None:
-        tiene_embedding = (
-            db.query(RostroAutorizado)
-            .filter(RostroAutorizado.id_persona == persona.id_persona)
-            .first()
-            is not None
-        )
-    elif persona.ruta_rostro is not None:
-        # Fallback para llamadas sin sesión (retrocompatibilidad)
-        tiene_embedding = True
-
-    return DatosPersonaAutorizada(
-        id_persona=persona.id_persona,
-        nombre=persona.nombre,
-        apellidos=persona.apellidos,
-        email=persona.email,
-        telefono=persona.telefono,
-        id_cubiculo=persona.id_cubiculo,
-        rol=persona.rol,
-        ruta_rostro=persona.ruta_rostro,
-        tiene_embedding=tiene_embedding,
-        fecha_registro=persona.fecha_registro,
     )

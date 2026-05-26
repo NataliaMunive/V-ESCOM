@@ -8,6 +8,15 @@ el sistema y recibir alertas de seguridad críticas.
 from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP
 from sqlalchemy.sql import func
 from app.bd import Base
+from pydantic import BaseModel
+from typing import Optional
+
+class AdministradorUpdate(BaseModel):
+    nombre: Optional[str] = None
+    apellidos: Optional[str] = None
+    email: Optional[str] = None
+    telefono: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 class Administrador(Base):
     """
@@ -44,3 +53,6 @@ class Administrador(Base):
     
     # Auditoría
     fecha_registro = Column(TIMESTAMP, server_default=func.now())
+
+    telegram_chat_id = Column(String(50), nullable=True)
+   

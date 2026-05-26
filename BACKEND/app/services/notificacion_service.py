@@ -1,222 +1,31 @@
-"""""
-Servicio para gestionar notificaciones relacionadas con eventos de seguridad
-
-Funciones principales:
-- notificar_intrusion: Crea una alerta y envía notificaciones SMS a los administradores activos con telefono registrado.
-
-Implementacion:
-- Se utiliza Twilio para el envio de SMS, con configuracion a traves de variables de entorno.
-- Se registra cada notificacion en la base de datos, incluyendo su estado (enviado, no configurado, error).
-- Si no hay destinatarios disponibles, se registra una notificación con estado Sin destinatario y no se intenta enviar SMS.
-"""
-from __future__ import annotations
-
 import os
-from typing import List, Set, Tuple
+import requests
+from dotenv import load_dotenv
 
-from sqlalchemy.orm import Session
-from app.models.persona_autorizada import PersonaAutorizada
+load_dotenv()
 
-from app.models.administrador import Administrador
-from app.models.alerta import Alerta
-from app.models.camara import Camara
-from app.models.evento import EventoAcceso
-from app.models.notificacion import Notificacion
-from app.models.profesor import Profesor
-from app.services.log_sistema_service import registrar_log
-from app.utils.phone_utils import normalizar_telefono_mx
-
-try:
-    from twilio.rest import Client
-except ImportError:
-    Client = None
-
-
-def _serializar_alerta_tiempo_real(
-    alerta: Alerta,
-    evento: EventoAcceso,
-    id_cubiculo: int | None,
-) -> dict:
-    return {
-        "id_alerta": alerta.id_alerta,
-        "id_evento": evento.id_evento,
-        "tipo_alerta": alerta.tipo_alerta,
-        "estado": alerta.estado,
-        "tipo_acceso": evento.tipo_acceso,
-        "id_camara": evento.id_camara,
-        "id_cubiculo": id_cubiculo,
-        "similitud": evento.similitud,
-        "fecha": str(alerta.fecha) if alerta.fecha is not None else None,
-        "hora": str(alerta.hora) if alerta.hora is not None else None,
-    }
-
-# ─── Funciones Auxiliares ────────────────────────────────────────────────────────
-# obtenemos destinatarios activos con telefono registrado para intrusiones
-def _obtener_destinatarios_intrusion(db: Session) -> List[Tuple[str, str]]:
-    admins = (
-        db.query(Administrador)
-        .filter(Administrador.activo.is_(True))
-        .filter(Administrador.telefono.isnot(None))
-        .all()
-    )
-
-    # Normalizamos teléfonos y preparamos lista de destinatarios (nombre, telefono)
-    destinatarios: List[Tuple[str, str]] = []
-    for admin in admins:
-        telefono = normalizar_telefono_mx(admin.telefono)
-        if telefono:
-            nombre = f"{admin.nombre} {admin.apellidos}".strip()
-            destinatarios.append((nombre, telefono))
-    return destinatarios
-
-# obtenemos profesores activos del cubiculo con telefono valido
-def _obtener_destinatarios_cubiculo(db: Session, id_cubiculo: int) -> List[Tuple[str, str]]:
-    """Obtiene profesores activos del cubiculo con telefono valido."""
-    # Obtener desde personas_autorizadas con rol 'Profesor'
-    personas = (
-        db.query(PersonaAutorizada)
-        .filter(PersonaAutorizada.rol == 'Profesor')
-        .filter(PersonaAutorizada.telefono.isnot(None))
-        .filter(PersonaAutorizada.id_cubiculo == id_cubiculo)
-        .all()
-    )
-
-    destinatarios: List[Tuple[str, str]] = []
-    for p in personas:
-        telefono = normalizar_telefono_mx(p.telefono)
-        if telefono:
-            nombre = f"Prof. {p.nombre} {p.apellidos or ''}".strip()
-            destinatarios.append((nombre, telefono))
-    return destinatarios
-
-# obtenemos id_cubiculo del evento a partir de la camara 
-def _obtener_id_cubiculo_evento(db: Session, evento: EventoAcceso) -> int | None:
-    camara = db.query(Camara).filter(Camara.id_camara == evento.id_camara).first()
-    if camara is None:
-        return None
-    return camara.id_cubiculo
-
-# crear cliente de Twilio si las variables de entorno estan configuradas, sino retorna None
-def _crear_cliente_twilio():
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-
-    if not account_sid or not auth_token or Client is None:
-        return None
-
-    return Client(account_sid, auth_token)
-
-# notificar_intrusion: Crea una alerta y envía notificaciones SMS a los administradores activos con telefono registrado.
-def notificar_intrusion(db: Session, evento: EventoAcceso) -> dict:
-    alerta = Alerta(
-        id_evento=evento.id_evento,
-        tipo_alerta="Intrusion",
-        estado="Pendiente",
-    )
-    db.add(alerta)
-    db.flush()
-    registrar_log(
-        db,
-        nivel="INFO",
-        origen="Servicio_SMS",
-        tipo="Notificacion",
-        id_evento=evento.id_evento,
-        mensaje=f"Alerta de intrusion creada (alerta #{alerta.id_alerta})",
-    )
-    # Obtener destinatarios: administradores activos con telefono + profesores del cubiculo
-    admins = _obtener_destinatarios_intrusion(db)
-    id_cubiculo = _obtener_id_cubiculo_evento(db, evento)
-    profesores = _obtener_destinatarios_cubiculo(db, id_cubiculo) if id_cubiculo is not None else []
-    # Unir y eliminar duplicados (mismo telefono) entre admins y profesores
-    destinatarios: List[Tuple[str, str]] = []
-    vistos: Set[str] = set()
-    # Primero los admins, luego los profesores (si hay solapamiento, se prioriza admin)
-    for nombre, telefono in admins + profesores:
-        if telefono not in vistos:
-            destinatarios.append((nombre, telefono))
-            vistos.add(telefono)
-    # Si no hay destinatarios, registrar notificación sin destinatario y salir
-    if not destinatarios:
-        registrar_log(
-            db,
-            nivel="WARNING",
-            origen="Servicio_SMS",
-            tipo="Notificacion",
-            id_evento=evento.id_evento,
-            mensaje=f"Sin destinatarios validos para alerta #{alerta.id_alerta}",
-        )
-        db.add(
-            Notificacion(
-                id_alerta=alerta.id_alerta,
-                destinatario="Sin destinatario",
-                telefono=None,
-                medio="SMS",
-                estado="Sin destinatario",
-            )
-        )
-        db.commit()
-        db.refresh(alerta)
-        return _serializar_alerta_tiempo_real(alerta, evento, id_cubiculo)
-    # Enviar SMS a cada destinatario y registrar resultado
-    twilio_client = _crear_cliente_twilio()
-    messaging_service_sid = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
-
-    cuerpo = (
-    f"[V-ESCOM] INTRUSIÓN en C- {id_cubiculo if id_cubiculo else '??'}. "
-    f"Evento #{evento.id_evento} | Cam:{evento.id_camara} | "
-    f"{evento.fecha} {evento.hora}"
-    )
-
-    enviados = 0
+def enviar_alerta_telegram(mensaje: str, ruta_imagen: str = None):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    target_chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
     
-    for nombre, telefono in destinatarios:
-        estado = "Pendiente"
-        if twilio_client is None or not messaging_service_sid:
-            estado = "No configurado"
+    # URL base para la API de Telegram
+    base_url = f"https://api.telegram.org/bot{token}"
+    
+    try:
+        # Si hay una imagen, enviamos una foto
+        if ruta_imagen and os.path.exists(ruta_imagen):
+            url = f"{base_url}/sendPhoto"
+            files = {'photo': open(ruta_imagen, 'rb')}
+            data = {'chat_id': chat_id, 'caption': mensaje}
+            response = requests.post(url, data=data, files=files)
         else:
-            try:
-                twilio_client.messages.create(
-                    messaging_service_sid=messaging_service_sid,
-                    body=cuerpo,
-                    to=telefono,
-                )
-                estado = "Enviado"
-                enviados += 1
-            except Exception as e:
-                estado = "Error"
-                registrar_log(
-                    db,
-                    nivel="ERROR",
-                    origen="Servicio_SMS",
-                    tipo="Notificacion",
-                    id_evento=evento.id_evento,
-                    mensaje=(
-                        f"Fallo al enviar SMS a {telefono} en alerta #{alerta.id_alerta}: {e}"
-                    ),
-                )
-
-        db.add(
-            Notificacion(
-                id_alerta=alerta.id_alerta,
-                destinatario=nombre,
-                telefono=telefono,
-                medio="SMS",
-                estado=estado,
-            )
-        )
-
-    alerta.estado = "Notificada" if enviados > 0 else "Pendiente"
-    registrar_log(
-        db,
-        nivel="INFO",
-        origen="Servicio_SMS",
-        tipo="Notificacion",
-        id_evento=evento.id_evento,
-        mensaje=(
-            f"Proceso de notificacion finalizado para alerta #{alerta.id_alerta}. "
-            f"Destinatarios={len(destinatarios)}, enviados={enviados}, estado_alerta={alerta.estado}"
-        ),
-    )
-    db.commit()
-    db.refresh(alerta)
-    return _serializar_alerta_tiempo_real(alerta, evento, id_cubiculo)
+            # Si es solo texto
+            url = f"{base_url}/sendMessage"
+            data = {'chat_id': chat_id, 'text': mensaje}
+            response = requests.post(url, data=data)
+            
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error enviando a Telegram: {e}")
+        return False
