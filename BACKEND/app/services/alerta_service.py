@@ -36,14 +36,23 @@ def _obtener_destinatarios_evento(db: Session, evento: EventoAcceso | None) -> l
     id_cubiculo = camara.id_cubiculo if camara else None
 
     destinatarios = []
-    admins = db.query(Administrador).filter(Administrador.telegram_chat_id.isnot(None)).all()
+    
+    # Filtramos nulos y cadenas vacías para que solo cuente a los que SÍ tienen Telegram
+    admins = (
+        db.query(Administrador)
+        .filter(Administrador.telegram_chat_id.isnot(None))
+        .filter(Administrador.telegram_chat_id != "")
+        .all()
+    )
     for admin in admins:
         destinatarios.append(f"Admin: {admin.nombre} {admin.apellidos}")
 
     if id_cubiculo is not None:
+        # Filtramos nulos y cadenas vacías aquí t
         personas = (
             db.query(PersonaAutorizada)
             .filter(PersonaAutorizada.telegram_chat_id.isnot(None))
+            .filter(PersonaAutorizada.telegram_chat_id != "")
             .filter(PersonaAutorizada.id_cubiculo == id_cubiculo)
             .all()
         )
@@ -126,6 +135,9 @@ def _a_alerta_detalle(db: Session, alerta: Alerta, evento: EventoAcceso | None) 
         total_destinatarios = len(destinatarios_notificados)
         enviados_total = total_destinatarios
         errores_total = 0
+        
+        # Asignamos el detalle para que no quede vacío en el modal del frontend
+        destinatarios_notificados_detalle = destinatarios_notificados.copy()
     else:
         total_destinatarios = len(notificaciones_validas)
         enviados_total = len(enviadas)
@@ -162,7 +174,7 @@ def obtener_alertas(
     Realiza una búsqueda avanzada de alertas con filtrado dinámico.
     Utiliza un OUTER JOIN para asegurar que se vean las alertas incluso si hubiera problemas con el registro del evento.
     """
-    # Iniciam la consulta base uniendo Alerta con su Evento correspondiente
+    # Iniciamos la consulta base uniendo Alerta con su Evento correspondiente
     query = (
         db.query(Alerta, EventoAcceso)
         .outerjoin(EventoAcceso, EventoAcceso.id_evento == Alerta.id_evento)
