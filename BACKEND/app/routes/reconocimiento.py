@@ -21,6 +21,7 @@ from app.schemas.reconocimiento_schema import (
     ResultadoReconocimiento,
     ResultadoReconocimientoMultiples,
     ResultadoSubidaMultiple,
+    ResumenEventos,
     UpdPersonaAutorizada,
 )
 from app.services import entrenamiento_service, reconocimiento_service
@@ -357,3 +358,36 @@ def listar_eventos(
     if not eventos:
         return {"message": "No hay eventos"}
     return eventos
+
+
+@router.get(
+    "/eventos/resumen",
+    response_model=ResumenEventos,
+    summary="Resumen agregado de eventos",
+)
+def resumen_eventos(
+    tipo: Optional[str] = Query(None, description="Filtrar: 'Autorizado' o 'No Autorizado'"),
+    id_camara: Optional[int] = Query(None),
+    id_persona: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: Administrador = Depends(get_current_admin),
+):
+    query = db.query(EventoAcceso)
+    if tipo:
+        query = query.filter(EventoAcceso.tipo_acceso == tipo)
+    if id_camara:
+        query = query.filter(EventoAcceso.id_camara == id_camara)
+    if id_persona:
+        query = query.filter(EventoAcceso.id_persona == id_persona)
+
+    total = query.count()
+    autorizados = query.filter(EventoAcceso.tipo_acceso == "Autorizado").count()
+    no_autorizados = query.filter(EventoAcceso.tipo_acceso == "No Autorizado").count()
+    tasa_acceso = round((autorizados / total) * 100, 1) if total else 0.0
+
+    return {
+        "total": total,
+        "autorizados": autorizados,
+        "no_autorizados": no_autorizados,
+        "tasa_acceso": tasa_acceso,
+    }

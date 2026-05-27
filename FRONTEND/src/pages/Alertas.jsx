@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAlertas } from '../services/api'
+import { getAlertas, getResumenAlertas } from '../services/api'
 import { conectarAlertasWebSocket } from '../services/wsAlertas'
 import './Alertas.css'
 
@@ -7,6 +7,7 @@ const ESTADOS = ['Todos', 'No Autorizado', 'Autorizado']
 
 export default function Alertas() {
   const [alertas, setAlertas]               = useState([])
+  const [resumen, setResumen]               = useState({ total: 0, no_autorizados: 0, autorizados: 0, tasa_intrusion: 0 })
   const [cargando, setCargando]             = useState(true)
   const [filtro, setFiltro]                 = useState('Todos')
   const [limite, setLimite]                 = useState(50)
@@ -14,6 +15,7 @@ export default function Alertas() {
   const [wsMensaje, setWsMensaje]           = useState('')
   const [alertaEnVivo, setAlertaEnVivo]     = useState(null)
   const [modalImagen, setModalImagen]       = useState(null) // { id_alerta, id_evento }
+  const [modalDetalle, setModalDetalle]     = useState(null)
 
   useEffect(() => { cargar() }, [filtro, limite])
 
@@ -64,17 +66,23 @@ export default function Alertas() {
     setCargando(true)
     try {
       const params = { limit: limite }
+      const paramsResumen = {}
       if (filtro !== 'Todos') params.tipo_acceso = filtro
-      const r = await getAlertas(params)
-      setAlertas(r.data)
+      if (filtro !== 'Todos') paramsResumen.tipo_acceso = filtro
+      const [rAlertas, rResumen] = await Promise.all([
+        getAlertas(params),
+        getResumenAlertas(paramsResumen),
+      ])
+      setAlertas(rAlertas.data)
+      setResumen(rResumen.data)
     } catch {}
     finally { setCargando(false) }
   }
 
-  const total      = alertas.length
-  const noAuth     = alertas.filter(a => a.tipo_acceso === 'No Autorizado').length
-  const auth       = alertas.filter(a => a.tipo_acceso === 'Autorizado').length
-  const porcentaje = total > 0 ? ((noAuth / total) * 100).toFixed(0) : 0
+  const total      = resumen.total
+  const noAuth     = resumen.no_autorizados
+  const auth       = resumen.autorizados
+  const porcentaje = resumen.tasa_intrusion
 
   const getNivel = (similitud) => {
     if (similitud === null || similitud === undefined) return { label: '—', cls: '' }
@@ -103,7 +111,7 @@ export default function Alertas() {
 
       {alertaEnVivo && (
         <div className="alerta-live-banner">
-          Nueva alerta: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} · Cámara {alertaEnVivo.id_camara ?? '—'}
+          Nueva alerta: {alertaEnVivo.tipo_acceso || alertaEnVivo.tipo_alerta} · Cámara {alertaEnVivo.id_camara ?? '—'} · Estado: {alertaEnVivo.estado || 'Pendiente'}
         </div>
       )}
 
@@ -155,6 +163,9 @@ export default function Alertas() {
           {alertas.map(a => {
             const nivel    = getNivel(a.similitud)
             const esAlerta = a.tipo_acceso === 'No Autorizado'
+            const estadoAlerta = a.estado || 'Pendiente'
+            const destinatarios = Array.isArray(a.destinatarios_notificados) ? a.destinatarios_notificados : []
+            const destinatariosDetalle = Array.isArray(a.destinatarios_notificados_detalle) ? a.destinatarios_notificados_detalle : destinatarios
             return (
               <div key={a.id_alerta}
                 className={`alerta-row ${esAlerta ? 'alerta-row-danger' : 'alerta-row-ok'}`}>
@@ -172,7 +183,31 @@ export default function Alertas() {
                   <div className="alerta-meta mono">
                     {a.fecha} {a.hora?.slice(0, 8)} · Cámara {a.id_camara ?? '—'} · Evento #{a.id_evento}
                   </div>
+                  <div className="alerta-meta alerta-notifs">
+                    Notificados {a.notificaciones_enviadas || 0}/{a.notificaciones_total || 0}
+                  </div>
                 </div>
+
+                <button
+                  className="btn-ver-detalle"
+                  title="Ver a quiénes se les notificó"
+                  onClick={() => setModalDetalle({
+                    id_alerta: a.id_alerta,
+                    id_evento: a.id_evento,
+                    fecha: a.fecha,
+                    hora: a.hora,
+                    estado: estadoAlerta,
+                    notificados: a.notificaciones_enviadas || 0,
+                    total: a.notificaciones_total || 0,
+                    destinatarios: destinatariosDetalle,
+                  })}
+                >
+                  Ver más
+                </button>
+
+                <span className={`estado-alerta estado-${estadoAlerta.toLowerCase()}`}>
+                  {estadoAlerta}
+                </span>
 
                 {esAlerta && (
                   <span className={`nivel-badge ${nivel.cls}`}>{nivel.label}</span>
@@ -219,6 +254,58 @@ export default function Alertas() {
           onCerrar={() => setModalImagen(null)}
         />
       )}
+
+      {modalDetalle && (
+        <ModalDetalleNotificacion
+          detalle={modalDetalle}
+          onCerrar={() => setModalDetalle(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModalDetalleNotificacion({ detalle, onCerrar }) {
+  return (
+    <div className="modal-overlay" onClick={onCerrar}>
+      <div className="modal-imagen modal-detalle-notificacion" onClick={e => e.stopPropagation()}>
+        <div className="modal-imagen-header">
+          <div className="modal-imagen-titulo">
+            <img src="/icons/alerta.svg" alt="" style={{ width: 22, height: 22, display: 'block' }} />
+            <div>
+              <h3>Detalle de notificación</h3>
+              <p className="modal-imagen-sub">
+                Alerta #{detalle.id_alerta} · Evento #{detalle.id_evento} · {detalle.estado}
+              </p>
+            </div>
+          </div>
+          <button className="modal-close" onClick={onCerrar}>✕</button>
+        </div>
+
+        <div className="modal-imagen-body modal-detalle-body">
+          <div className="detalle-resumen">
+            <span className="detalle-resumen-label">Notificados</span>
+            <span className="detalle-resumen-valor">{detalle.notificados}/{detalle.total}</span>
+          </div>
+
+          <div className="detalle-lista">
+            <h4>Personas notificadas.</h4>
+            {detalle.destinatarios.length > 0 ? (
+              detalle.destinatarios.map((nombre) => (
+                <div key={nombre} className="detalle-item">
+                  {nombre}
+                </div>
+              ))
+            ) : (
+              <div className="detalle-vacio">Sin destinatarios notificados</div>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-imagen-footer">
+          <button className="btn-secondary" onClick={onCerrar}>Cerrar</button>
+        </div>
+      </div>
     </div>
   )
 }

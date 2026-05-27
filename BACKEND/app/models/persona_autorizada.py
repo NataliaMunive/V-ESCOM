@@ -28,6 +28,8 @@ class PersonaAutorizada(Base):
     
     # Teléfono en formato E.164 para notificaciones directas
     telefono = Column(String(20))
+    # ID de chat de Telegram para notificaciones directas (no obligatorio)
+    telegram_chat_id = Column(String(64), nullable=True)
     
     # Ubicación física principal asignada
     id_cubiculo = Column(Integer, ForeignKey("cubiculos.id_cubiculo"))

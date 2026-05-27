@@ -79,6 +79,7 @@ export const identificarRostrosMultiples = (file, id_camara) => {
 
 // ── Eventos ───────────────────────────────────────────────────────
 export const getEventos = (params) => api.get('/reconocimiento/eventos', { params })
+export const getResumenEventos = (params) => api.get('/reconocimiento/eventos/resumen', { params })
 
 // ── Cámaras CRUD ──────────────────────────────────────────────────
 export const getCamaras       = ()          => api.get('/camaras/')
@@ -94,8 +95,9 @@ export const getStreamsActivos = ()  => api.get('/stream/activas')
 export const getEstadoStream  = (id) => api.get(`/stream/estado/${id}`)
 
 // ── Alertas ───────────────────────────────────────────────────────
-export const getAlertas       = (params)    => api.get('/alertas/', { params })
-export const actualizarAlerta = (id, datos) => api.put(`/alertas/${id}`, datos)
+export const getAlertas        = (params)    => api.get('/alertas/', { params })
+export const getResumenAlertas  = (params)    => api.get('/alertas/resumen', { params })
+export const actualizarAlerta   = (id, datos) => api.put(`/alertas/${id}`, datos)
 
 // ── Administradores ───────────────────────────────────────────────
 export const getAdmins        = ()          => api.get('/auth/admins')

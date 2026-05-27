@@ -34,7 +34,7 @@ class Administrador(Base):
     # Identidad y Comunicación
     # El email es el 'username' principal para el login
     email = Column(String(100), unique=True, nullable=False, index=True)
-    # Almacenado en formato E.164 para integración con Twilio
+    # Almacenado en formato E.164 para notificaciones (SMS/externas)
     telefono = Column(String(20))
     # Ruta al archivo de imagen para el perfil del administrador
     fotografia = Column(String(255)) 

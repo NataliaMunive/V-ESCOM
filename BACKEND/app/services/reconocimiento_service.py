@@ -253,6 +253,34 @@ def _recortar_imagen_por_bbox(imagen_bytes: bytes, bbox: tuple[int, int, int, in
     return buffer.tobytes()
 
 
+def _a_schema(persona: PersonaAutorizada, db: Session) -> DatosPersonaAutorizada:
+    """Convierte una `PersonaAutorizada` de SQLAlchemy al esquema `DatosPersonaAutorizada`.
+
+    Añade el campo `tiene_embedding` consultando la tabla `rostros_autorizados`.
+    """
+    tiene = (
+        db.query(RostroAutorizado)
+        .filter(RostroAutorizado.id_persona == persona.id_persona)
+        .filter(RostroAutorizado.embedding.isnot(None))
+        .first()
+        is not None
+    )
+
+    datos = {
+        "id_persona": persona.id_persona,
+        "nombre": persona.nombre,
+        "apellidos": persona.apellidos,
+        "email": persona.email,
+        "telefono": persona.telefono,
+        "id_cubiculo": persona.id_cubiculo,
+        "rol": persona.rol,
+        "ruta_rostro": persona.ruta_rostro,
+        "tiene_embedding": bool(tiene),
+        "fecha_registro": getattr(persona, "fecha_registro", None),
+    }
+    return DatosPersonaAutorizada(**datos)
+
+
 class _BytesUpload:
     def __init__(self, contenido: bytes):
         self.filename = "rostro.jpg"
@@ -690,15 +718,15 @@ async def _procesar_embedding_reconocimiento(
     if tipo_acceso == "No Autorizado":
         camara_key = id_camara if id_camara is not None else -1
         _contador_intrusos_por_camara[camara_key] = _contador_intrusos_por_camara.get(camara_key, 0) + 1
+        contador_actual = _contador_intrusos_por_camara[camara_key]
         
-        toca_enviar_sms = (_contador_intrusos_por_camara[camara_key] >= LIMITE_DETECCIONES_NOTIFICACION)
+        toca_enviar_sms = (contador_actual >= LIMITE_DETECCIONES_NOTIFICACION)
 
         if toca_enviar_sms:
             _contador_intrusos_por_camara[camara_key] = 0
             mensaje_log = f"Notificación SMS disparada tras {LIMITE_DETECCIONES_NOTIFICACION} detecciones"
         else:
-            _contador_intrusos_por_camara[camara_key] = contador_actual
-            mensaje_log = f"Detección {_contador_intrusos_por_camara[camara_key]}/{LIMITE_DETECCIONES_NOTIFICACION} guardada. SMS omitido."
+            mensaje_log = f"Detección {contador_actual}/{LIMITE_DETECCIONES_NOTIFICACION} guardada. SMS omitido."
 
         try:
             alerta_ws = notificacion_service.notificar_intrusion(db, evento, enviar_sms=toca_enviar_sms)

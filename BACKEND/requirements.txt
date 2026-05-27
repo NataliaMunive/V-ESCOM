@@ -39,8 +39,9 @@ numpy
 scikit-learn
 joblib
 
-# ── Notificaciones ─────────────────────────────────────────────────────────────
-twilio
+# ── Notificaciones (Telegram)
+# Usamos Telegram como servicio de mensajería para alertas.
+requests
 
 # ── Reportes PDF ──────────────────────────────────────────────────────────────
 reportlab

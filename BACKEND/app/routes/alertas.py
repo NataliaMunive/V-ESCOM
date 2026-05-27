@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.bd import get_db
 from app.core.deps import get_current_admin
 from app.models.administrador import Administrador
-from app.schemas.alerta_schema import DatosAlerta, UpdAlerta
+from app.schemas.alerta_schema import DatosAlerta, ResumenAlertas, UpdAlerta
 from app.services import alerta_service
 
 router = APIRouter(prefix="/alertas", tags=["Alertas"])
@@ -44,6 +44,22 @@ def listar_alertas(
         tipo_acceso=tipo_acceso,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/resumen", response_model=ResumenAlertas, summary="Resumen de alertas")
+def resumen_alertas(
+    estado: str | None = Query(default=None, description="Filtrar por 'Pendiente' o 'Notificada'"),
+    tipo_alerta: str | None = Query(default=None, description="Filtrar por el tipo de alerta"),
+    tipo_acceso: str | None = Query(default=None, description="Filtrar por acceso 'Autorizado' o 'No Autorizado'"),
+    db: Session = Depends(get_db),
+    _admin: Administrador = Depends(get_current_admin),
+):
+    return alerta_service.obtener_resumen_alertas(
+        db,
+        estado=estado,
+        tipo_alerta=tipo_alerta,
+        tipo_acceso=tipo_acceso,
     )
 
 

@@ -27,7 +27,7 @@ class Profesor(Base):
     
     # Credenciales y contacto (Garantizan que no haya duplicados)
     correo = Column(String, unique=True, nullable=False)
-    # Almacenado en formato E.164 para compatibilidad con Twilio
+    # Almacenado en formato E.164 para uso en notificaciones
     telefono = Column(String(20), unique=True)
     
     # Relación de adscripción: Define qué cubículo tiene bajo su resguardo

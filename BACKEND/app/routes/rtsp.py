@@ -10,6 +10,8 @@ import asyncio
 import cv2
 import os
 import logging
+import socket
+from urllib.parse import urlsplit
 
 from app.bd import get_db
 from app.core.deps import get_current_admin
@@ -28,7 +30,22 @@ def _prevalidar_rtsp(rtsp_url: str, timeout_ms: int = 6000) -> tuple[bool, str]:
     Verifica rápidamente si la URL RTSP puede abrirse antes de iniciar el worker.
     Evita esperar los reintentos largos del ciclo principal para errores de credenciales/URL.
     """
-    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+    os.environ.setdefault(
+        "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+        "rtsp_transport;tcp|stimeout;6000000|max_delay;5000000|fflags;nobuffer",
+    )
+
+    # Validación rápida de conectividad al host/puerto antes de abrir con OpenCV.
+    # Si falla aquí, el problema suele ser red, cámara apagada o URL/host incorrecto.
+    try:
+        partes = urlsplit(rtsp_url)
+        host = partes.hostname
+        puerto = partes.port or 554
+        if host:
+            with socket.create_connection((host, puerto), timeout=3):
+                pass
+    except Exception:
+        return False, f"No hay conexión al host RTSP {rtsp_url}"
 
     cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)  # type: ignore
     try:

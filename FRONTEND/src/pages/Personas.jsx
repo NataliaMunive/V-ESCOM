@@ -6,7 +6,7 @@ import {
 import { conectarAlertasWebSocket } from '../services/wsAlertas'
 import './Personas.css'
 
-const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', id_cubiculo: '', rol: 'Profesor' }
+const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', id_cubiculo: '', rol: 'Profesor', telegram_chat_id: '' }
 
 export default function Personas() {
   const [personas, setPersonas] = useState([])
@@ -92,6 +92,7 @@ export default function Personas() {
       telefono: p.telefono || '',
       id_cubiculo: p.id_cubiculo || '',
       rol: p.rol || 'Profesor',
+      telegram_chat_id: p.telegram_chat_id || '',
     })
     setError('')
     setModal('editar')
@@ -327,13 +328,14 @@ const handleForzarRostro = async () => {
                 <th>Correo</th>
                 <th>Rol</th>
                 <th>Cubículo</th>
+                <th>Telegram</th>
                 <th>Embedding</th>
-                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtradas.map(p => (
-                <tr key={p.id_persona}>
+                <>
+                <tr key={p.id_persona} className="persona-main-row">
                   <td>
                     <div className="persona-nombre-cell">
                       <div className="persona-avatar">
@@ -342,17 +344,23 @@ const handleForzarRostro = async () => {
                       <span>{p.nombre} {p.apellidos}</span>
                     </div>
                   </td>
-                  <td className="td-muted">{p.email || '—'}</td>
+                  <td className="td-muted td-email">{p.email || '—'}</td>
                   <td><span className="rol-badge">{p.rol}</span></td>
                   <td className="td-muted mono">{p.id_cubiculo ?? '—'}</td>
+                  <td>
+                    <span className={`tg-badge ${p.telegram_chat_id ? 'tg-ok' : 'tg-no'}`}>
+                      {p.telegram_chat_id ? 'Vinculado' : 'No vinculado'}
+                    </span>
+                  </td>
                   <td>
                     <span className={`emb-badge ${p.tiene_embedding ? 'emb-ok' : 'emb-no'}`}>
                       {p.tiene_embedding ? '✓ Registrado' : '✕ Sin foto'}
                     </span>
                   </td>
-                  <td>
+                </tr>
+                <tr key={`${p.id_persona}-acciones`} className="persona-actions-row">
+                  <td colSpan={6}>
                     <div className="acciones">
-                      {/* Subir foto */}
                       <button
                         className="btn-accion"
                         type="button"
@@ -378,6 +386,7 @@ const handleForzarRostro = async () => {
                     </div>
                   </td>
                 </tr>
+                </>
               ))}
             </tbody>
           </table>
@@ -422,6 +431,11 @@ const handleForzarRostro = async () => {
                   <label>Teléfono</label>
                   <input name="telefono" value={form.telefono} onChange={handleChange} />
                 </div>
+              </div>
+              <div className="field">
+                <label>ID de Telegram</label>
+                <input name="telegram_chat_id" value={form.telegram_chat_id} onChange={handleChange} placeholder="Ej: 123456789" />
+                <small style={{ fontSize: 11, color: '#888', marginTop: 6 }}>Obtén tu ID escribiendo /start a @userinfobot</small>
               </div>
               <div className="form-row">
                 <div className="field">

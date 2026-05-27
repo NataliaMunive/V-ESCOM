@@ -71,6 +71,11 @@
 .estado-ok  { color: var(--verde-ok); }
 .estado-off { color: var(--texto-muted); }
 
+/* Telegram badge */
+.tg-badge { font-size: 12px; font-weight: 700; padding: 6px 8px; border-radius: 8px; }
+.tg-ok { color: #0f5132; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.12); }
+.tg-no { color: #6c757d; background: rgba(108,117,125,0.04); border: 1px solid rgba(0,0,0,0.03); }
+
 .acciones { display: flex; gap: 10px; }
 .btn-icono {
   width: 32px; height: 32px; border-radius: 6px;
@@ -150,6 +155,24 @@
 .pass-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 6px; display:flex; align-items:center; justify-content:center; color: var(--texto-muted); }
 .pass-toggle img { display:block; width:18px; height:18px }
 .pass-wrap input:focus { background: var(--fondo); }
+
+/* Forzar fondo oscuro en inputs de contraseña y manejar autofill del navegador */
+.pass-wrap input {
+  background: var(--fondo) !important;
+  color: var(--texto) !important;
+}
+
+/* Chrome / Edge autofill override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--fondo) inset !important;
+  box-shadow: 0 0 0 1000px var(--fondo) inset !important;
+  -webkit-text-fill-color: var(--texto) !important;
+}
 
 .form-error {
   background: rgba(230,57,70,0.1); border: 1px solid rgba(230,57,70,0.3);

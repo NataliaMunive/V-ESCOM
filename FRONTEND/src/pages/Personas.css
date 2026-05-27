@@ -45,7 +45,12 @@
   overflow: hidden;
 }
 
-.tabla { width: 100%; border-collapse: collapse; }
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  text-align: center;
+}
 
 .tabla thead tr {
   border-bottom: 1px solid var(--borde);
@@ -62,6 +67,13 @@
   letter-spacing: 0.8px;
 }
 
+.tabla th:nth-child(1), .tabla td:nth-child(1) { width: 28%; }
+.tabla th:nth-child(2), .tabla td:nth-child(2) { width: 28%; }
+.tabla th:nth-child(3), .tabla td:nth-child(3) { width: 12%; }
+.tabla th:nth-child(4), .tabla td:nth-child(4) { width: 10%; }
+.tabla th:nth-child(5), .tabla td:nth-child(5) { width: 12%; }
+.tabla th:nth-child(6), .tabla td:nth-child(6) { width: 10%; }
+
 .tabla tbody tr {
   border-bottom: 1px solid var(--borde);
   transition: background var(--transicion);
@@ -71,20 +83,51 @@
 .tabla tbody tr:hover { background: var(--fondo-card2); }
 
 .tabla td {
-  padding: 14px 16px;
+  padding: 10px 12px;
   font-size: 14px;
   color: var(--texto);
-  vertical-align: middle;
+  vertical-align: top;
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: left;
 }
 
 .td-muted { color: var(--texto-suave); }
 .mono { font-family: var(--fuente-mono); }
 
 /* ── Celda nombre ────────────────────────────────────────────── */
-.persona-nombre-cell { display: flex; align-items: center; gap: 10px; }
+.persona-nombre-cell { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+
+.persona-nombre-cell span {
+  display: block;
+  min-width: 0;
+  line-height: 1.2;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.td-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.td-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabla td:nth-child(3),
+.tabla td:nth-child(4),
+.tabla td:nth-child(5),
+.tabla td:nth-child(6) {
+  text-align: center;
+}
 
 .persona-avatar {
-  width: 32px; height: 32px;
+  width: 30px; height: 30px;
   background: linear-gradient(135deg, var(--azul-ipn), var(--acento));
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -102,6 +145,9 @@
   background: rgba(0,51,160,0.2);
   color: var(--acento);
   border: 1px solid rgba(0,194,224,0.2);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .emb-badge {
@@ -110,6 +156,9 @@
   padding: 3px 10px;
   border-radius: 20px;
   font-family: var(--fuente-mono);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .emb-ok {
@@ -124,8 +173,42 @@
   border: 1px solid rgba(230,57,70,0.2);
 }
 
+/* Telegram badge */
+.tg-badge { font-size: 12px; font-weight: 700; padding: 6px 8px; border-radius: 8px; }
+.tg-badge { white-space: nowrap; display: inline-flex; align-items: center; }
+.tg-ok { color: #0f5132; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.12); }
+.tg-no { color: #6c757d; background: rgba(108,117,125,0.04); border: 1px solid rgba(0,0,0,0.03); }
+
 /* ── Acciones ────────────────────────────────────────────────── */
-.acciones { display: flex; gap: 6px; }
+.persona-actions-row td {
+  padding-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.persona-actions-row:last-child td {
+  border-bottom: none;
+}
+
+.acciones {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  grid-auto-rows: 32px;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.acciones .btn-accion {
+  width: 32px;
+  height: 32px;
+}
+
+.acciones .btn-accion:nth-child(4),
+.acciones .btn-accion:nth-child(5) {
+  grid-row: 2;
+}
 
 .btn-accion {
   width: 32px; height: 32px;
@@ -151,6 +234,7 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--texto);
+  white-space: nowrap;
 }
 
 .acciones .btn-accion[title="Ver perfil"] {

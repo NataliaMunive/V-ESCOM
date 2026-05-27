@@ -20,6 +20,7 @@ class CrearPersonaAutorizada(BaseModel):
     telefono: Optional[str] = None
     id_cubiculo: Optional[int] = None
     rol: Optional[str] = "Profesor"
+    telegram_chat_id: Optional[str] = None
 
 class DatosPersonaAutorizada(BaseModel):
     """Información completa del perfil autorizado, incluyendo estado biométrico."""
@@ -36,6 +37,7 @@ class DatosPersonaAutorizada(BaseModel):
     # Indica si ya existe un vector (embedding) generado para esta persona
     tiene_embedding: bool = False
     fecha_registro: Optional[datetime] = None
+    telegram_chat_id: Optional[str] = None
 
 class UpdPersonaAutorizada(BaseModel):
     """Campos editables para el perfil de una persona autorizada."""
@@ -45,6 +47,7 @@ class UpdPersonaAutorizada(BaseModel):
     telefono: Optional[str] = None
     id_cubiculo: Optional[int] = None
     rol: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 
 # ─── Motor de reconocimiento ──────────────────────────────────────────────────
@@ -124,3 +127,11 @@ class DatosEvento(BaseModel):
     hora: Optional[time] = None
     # Métrica de certeza con la que se registró el evento
     similitud: Optional[float] = None
+
+
+class ResumenEventos(BaseModel):
+    """Totales agregados para el panel de eventos."""
+    total: int
+    autorizados: int
+    no_autorizados: int
+    tasa_acceso: float

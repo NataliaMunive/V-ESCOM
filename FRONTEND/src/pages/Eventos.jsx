@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { getEventos } from '../services/api'
+import { getEventos, getResumenEventos } from '../services/api'
 import './Eventos.css'
 
 const FILTROS = ['Todos', 'Autorizado', 'No Autorizado']
 
 export default function Eventos() {
   const [eventos, setEventos] = useState([])
+  const [resumen, setResumen] = useState({ total: 0, autorizados: 0, no_autorizados: 0, tasa_acceso: 0 })
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('Todos')
   const [limite, setLimite] = useState(50)
@@ -16,30 +17,38 @@ export default function Eventos() {
     setCargando(true)
     try {
       const params = { limit: limite }
-      if (filtro !== 'Todos') params.tipo = filtro
-      const res = await getEventos(params)
-      setEventos(Array.isArray(res.data) ? res.data : [])
+      const paramsResumen = {}
+      if (filtro !== 'Todos') {
+        params.tipo = filtro
+        paramsResumen.tipo = filtro
+      }
+      const [resEventos, resResumen] = await Promise.all([
+        getEventos(params),
+        getResumenEventos(paramsResumen),
+      ])
+      setEventos(Array.isArray(resEventos.data) ? resEventos.data : [])
+      setResumen(resResumen.data)
     } catch {}
     finally { setCargando(false) }
   }
 
   const eventosLista = Array.isArray(eventos) ? eventos : []
-  const totalAuth = eventosLista.filter(e => e.tipo_acceso === 'Autorizado').length
-  const totalNoAuth = eventosLista.filter(e => e.tipo_acceso === 'No Autorizado').length
+  const totalAuth = resumen.autorizados
+  const totalNoAuth = resumen.no_autorizados
 
   return (
     <div className="eventos-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Historial de Eventos</h1>
-          <p className="page-sub">{eventosLista.length} eventos · últimos registros</p>
+          <p className="page-sub">{resumen.total} eventos · totales de la base de datos</p>
         </div>
       </div>
 
       {/* Stats rápidas */}
       <div className="ev-stats">
         <div className="ev-stat">
-          <span className="ev-stat-val">{eventosLista.length}</span>
+          <span className="ev-stat-val">{resumen.total}</span>
           <span className="ev-stat-label">Total</span>
         </div>
         <div className="ev-stat ev-stat-ok">
@@ -52,9 +61,7 @@ export default function Eventos() {
         </div>
         <div className="ev-stat">
           <span className="ev-stat-val">
-            {eventosLista.length > 0
-              ? `${((totalAuth / eventosLista.length) * 100).toFixed(0)}%`
-              : '—'}
+            {resumen.tasa_acceso ? `${resumen.tasa_acceso.toFixed(1)}%` : '—'}
           </span>
           <span className="ev-stat-label">Tasa de acceso</span>
         </div>

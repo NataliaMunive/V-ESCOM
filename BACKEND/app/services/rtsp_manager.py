@@ -86,10 +86,10 @@ def construir_rtsp_url(
     if usuario and contrasena:
         return (
             f"rtsp://{quote(usuario, safe='')}:{quote(contrasena, safe='')}"
-            f"@{fuente}:554/{stream}"
+            f"@{fuente}/{stream}"
         )
 
-    return f"rtsp://{fuente}:554/{stream}"
+    return f"rtsp://{fuente}/{stream}"
 
 
 def resolver_rtsp_url_camara(
@@ -103,23 +103,28 @@ def resolver_rtsp_url_camara(
     if not fuente:
         raise ValueError("La cámara no tiene IP o URL configurada.")
 
+    url_especifica = _primer_valor_no_vacio(
+        os.getenv(f"RTSP_URL_{id_camara}"),
+        os.getenv(f"RTSP_URL{id_camara}"),
+    )
+    if url_especifica:
+        return _normalizar_rtsp_con_credenciales(url_especifica)
+
     fuente = str(fuente).strip()
     if _es_fuente_directa(fuente):
         return _normalizar_rtsp_con_credenciales(fuente)
 
-    url_especifica = _primer_valor_no_vacio(os.getenv(f"RTSP_URL_{id_camara}"))
-    if url_especifica:
-        return _normalizar_rtsp_con_credenciales(url_especifica)
-
     usuario_final = _primer_valor_no_vacio(
         user,
         os.getenv(f"RTSP_USER_{id_camara}"),
+        os.getenv(f"RTSP_USER{id_camara}"),
         os.getenv("RTSP_USER"),
         "adminadmin",
     )
     contrasena_final = _primer_valor_no_vacio(
         pwd,
         os.getenv(f"RTSP_PASS_{id_camara}"),
+        os.getenv(f"RTSP_PASS{id_camara}"),
         os.getenv("RTSP_PASS"),
     )
     stream_final = _primer_valor_no_vacio(
@@ -170,7 +175,10 @@ class CameraWorker:
     def _capture_loop(self) -> None:
         """Corre en un thread OS — lee frames y los mete en la queue."""
         reintentos = 0
-        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+        os.environ.setdefault(
+            "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+            "rtsp_transport;tcp|stimeout;6000000|max_delay;5000000|fflags;nobuffer",
+        )
 
         while self.activo and reintentos <= MAX_REINTENTOS:
             log.info(f"[Cam#{self.id_camara}] Conectando a {self.rtsp_url} ...")

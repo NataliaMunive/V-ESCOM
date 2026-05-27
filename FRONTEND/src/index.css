@@ -34,6 +34,31 @@ input, select, textarea { font-family: var(--fuente-ui); }
 img { max-width: 100%; display: block; }
 ul { list-style: none; }
 
+/* Fondo oscuro y texto legible en todos los inputs/textarea
+   y corregir el comportamiento de autofill del navegador */
+input, textarea {
+  background: var(--fondo) !important;
+  color: var(--texto) !important;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--acento);
+  -webkit-box-shadow: 0 0 0 3px rgba(0,194,224,0.06);
+  box-shadow: 0 0 0 3px rgba(0,194,224,0.06);
+}
+
+/* Chrome / Edge autofill override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--fondo) inset !important;
+  box-shadow: 0 0 0 1000px var(--fondo) inset !important;
+  -webkit-text-fill-color: var(--texto) !important;
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--fondo); }
 ::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 3px; }

@@ -210,6 +210,7 @@ def crear_admin(db: Session, datos: CrearAdmin) -> Administrador:
         email=email_norm,
         telefono=telefono_norm,
         contrasena=hash_password(datos.contrasena),
+        telegram_chat_id=(datos.telegram_chat_id.strip() if getattr(datos, 'telegram_chat_id', None) else None),
     )
     db.add(nuevo)
     db.commit()

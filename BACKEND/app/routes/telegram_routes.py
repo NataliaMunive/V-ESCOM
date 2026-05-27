@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from app.bd import get_db
 from app.models.administrador import Administrador
+from app.models.persona_autorizada import PersonaAutorizada
 
 router = APIRouter()
 
@@ -23,5 +24,18 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                 admin.telegram_chat_id = str(chat_id)
                 db.commit()
                 return {"status": "Registrado correctamente"}
+
+            persona = (
+                db.query(PersonaAutorizada)
+                .filter(PersonaAutorizada.email == email)
+                .filter(PersonaAutorizada.rol == "Profesor")
+                .first()
+            )
+            if persona:
+                persona.telegram_chat_id = str(chat_id)
+                db.commit()
+                return {"status": "Registrado correctamente", "tipo": "profesor"}
+
+            return {"status": "No encontrado", "detail": "No existe un admin o profesor con ese correo"}
     
     return {"status": "ok"}

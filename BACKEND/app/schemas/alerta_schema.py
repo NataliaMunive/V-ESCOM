@@ -33,9 +33,26 @@ class DatosAlerta(BaseModel):
     fecha: Optional[date] = None
     hora: Optional[time] = None
 
+    # Detalle de notificaciones asociadas a la alerta
+    notificaciones_total: int = 0
+    notificaciones_enviadas: int = 0
+    notificaciones_errores: int = 0
+    destinatarios_notificados: list[str] = Field(default_factory=list)
+    destinatarios_notificados_detalle: list[str] = Field(default_factory=list)
+
     class Config:
         # Habilita la lectura de objetos ORM con relaciones cargadas (eager loading)
         from_attributes = True
+
+
+class ResumenAlertas(BaseModel):
+    """
+    Resumen agregado de alertas para paneles y tarjetas.
+    """
+    total: int
+    no_autorizados: int
+    autorizados: int
+    tasa_intrusion: float
 
 
 class UpdAlerta(BaseModel):

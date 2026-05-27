@@ -105,6 +105,7 @@ export default function Administradores() {
                 <th>Nombre</th>
                 <th>Correo</th>
                 <th>Teléfono</th>
+                <th>Telegram</th>
                 <th>Estado</th>
                 <th>Registro</th>
                 <th>Acciones</th>
@@ -124,6 +125,11 @@ export default function Administradores() {
                   </td>
                   <td className="td-muted">{a.email}</td>
                   <td className="td-muted">{a.telefono || '—'}</td>
+                  <td>
+                    <span className={`tg-badge ${a.telegram_chat_id ? 'tg-ok' : 'tg-no'}`}>
+                      {a.telegram_chat_id ? 'Vinculado' : 'No vinculado'}
+                    </span>
+                  </td>
                   <td>
                     <span className={`estado-badge ${a.activo ? 'estado-ok' : 'estado-off'}`}>
                       {a.activo ? '● Activo' : '○ Inactivo'}

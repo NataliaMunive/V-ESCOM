@@ -30,6 +30,8 @@ class CrearAdmin(BaseModel):
     email: EmailStr
     # El teléfono es opcional pero recomendado para recibir alertas SMS
     telefono: Optional[str] = None
+    # Opcional: chat_id de Telegram para recibir notificaciones
+    telegram_chat_id: Optional[str] = None
     # La contraseña viaja en texto plano y debe ser hasheada en la capa de servicios
     contrasena: str
 
@@ -45,6 +47,9 @@ class DatosAdmin(BaseModel):
     email: str
     telefono: Optional[str] = None
     fotografia: Optional[str] = None
+    # Indica el chat_id de Telegram (si existe). Se incluye para que el cliente
+    # pueda saber si la cuenta está vinculada; el valor no debe mostrarse directamente.
+    telegram_chat_id: Optional[str] = None
     activo: bool
     fecha_registro: Optional[datetime] = None
 
@@ -63,3 +68,4 @@ class UpdAdmin(BaseModel):
     telefono: Optional[str] = None
     # Si se incluye, el servicio detectará el cambio y generará un nuevo hash
     contrasena: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
