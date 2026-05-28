@@ -13,3 +13,4 @@ BACKEND/modelos/
 # Caché de Vite / dependencias de frontend
 FRONTEND/node_modules/
 FRONTEND/dist/
+/BACKEND/docs
