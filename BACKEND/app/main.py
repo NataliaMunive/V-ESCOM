@@ -61,7 +61,6 @@ rtsp_manager.inicializar(app)
 fotos_path = Path(__file__).resolve().parent.parent / "fotos_rostros"
 app.mount("/fotos_rostros", StaticFiles(directory=str(fotos_path)), name="fotos_rostros")
 
-
 def _traducir_error_validacion(error: dict) -> str:
     tipo = error.get("type", "")
     campo = " -> ".join(str(p) for p in error.get("loc", [])[1:])
