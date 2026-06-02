@@ -39,9 +39,9 @@ LIMITE_DETECCIONES_NOTIFICACION = int(os.getenv("LIMITE_DETECCIONES_NOTIFICACION
 # Umbrales por método:
 # - SVM: probabilidad del clasificador (recomendado >= 0.60)
 # - Coseno: similitud ArcFace (recomendado >= 0.45)
-SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.40"))
+SIMILITUD_UMBRAL = float(os.getenv("SIMILITUD_UMBRAL", "0.60"))
 SIMILITUD_UMBRAL_COSENO = float(
-    os.getenv("SIMILITUD_UMBRAL_COSENO", str(max(SIMILITUD_UMBRAL, 0.45)))
+    os.getenv("SIMILITUD_UMBRAL_COSENO", str(max(SIMILITUD_UMBRAL, 0.50)))
 )
 PROBABILIDAD_UMBRAL_SVM = float(
     os.getenv("PROBABILIDAD_UMBRAL_SVM", str(max(SIMILITUD_UMBRAL, 0.60)))
