@@ -98,7 +98,7 @@ export default function ModalPrivacidad({ onAceptar }) {
               <ul className="mp-list">
                 <li>Controlar el acceso físico a cubículos de la unidad ESCOM.</li>
                 <li>Identificar en tiempo real a personas autorizadas mediante reconocimiento facial.</li>
-                <li>Generar alertas y notificaciones SMS ante detecciones de personas no autorizadas.</li>
+                <li>Generar alertas y notificaciones por mensaje de texto ante detecciones de personas no autorizadas.</li>
                 <li>Mantener bitácora de eventos para fines de auditoría y seguridad institucional.</li>
               </ul>
 
@@ -112,8 +112,8 @@ export default function ModalPrivacidad({ onAceptar }) {
 
               <h2 className="mp-section-title">Transferencia de Datos</h2>
               <p>
-                El único tercero que recibe datos es <strong>Twilio Inc.</strong>, quien recibe
-                exclusivamente el número telefónico del destinatario para el envío de alertas SMS.
+                El único tercero que recibe datos es <strong>Telegram.</strong>, quien recibe
+                exclusivamente el id de Telegram del destinatario para el envío de alertas.
                 No se transfieren datos biométricos a ningún tercero.
               </p>
             </div>

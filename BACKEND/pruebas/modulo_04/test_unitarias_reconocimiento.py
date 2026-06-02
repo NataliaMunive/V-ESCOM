@@ -15,8 +15,7 @@ Casos cubiertos (plan de pruebas §Grupo 1):
 
 Cómo ejecutar (desde la carpeta BACKEND con el entorno virtual activado):
     .\\venv\\Scripts\\python.exe -m pytest pruebas/modulo_06/test_unitarias_reconocimiento.py -v
-    .\\venv\\Scripts\\python.exe -m pytest pruebas/modulo_06/test_unitarias_reconocimiento.py -v -k "U05 or U06 or U07 or U08 or U09"
-
+    
 Nota sobre assets de imagen:
     Los casos U01, U03 y U04 requieren imágenes reales en:
         pruebas/assets/persona_frontal.jpg    — un solo rostro frontal

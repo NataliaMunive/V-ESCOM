@@ -5,6 +5,7 @@ import {
 } from '../services/api'
 import { conectarAlertasWebSocket } from '../services/wsAlertas'
 import './Personas.css'
+import { maskEmail, maskPhone } from '../utils/mask'
 
 const FORM_VACIO = { nombre: '', apellidos: '', email: '', telefono: '', id_cubiculo: '', rol: 'Profesor', telegram_chat_id: '' }
 
@@ -344,7 +345,7 @@ const handleForzarRostro = async () => {
                       <span>{p.nombre} {p.apellidos}</span>
                     </div>
                   </td>
-                  <td className="td-muted td-email">{p.email || '—'}</td>
+                  <td className="td-muted td-email">{p.email ? maskEmail(p.email) : '—'}</td>
                   <td><span className="rol-badge">{p.rol}</span></td>
                   <td className="td-muted mono">{p.id_cubiculo ?? '—'}</td>
                   <td>
@@ -498,8 +499,8 @@ const handleForzarRostro = async () => {
                     <div className="perfil-linea"><span>Nombre:</span> <strong>{perfil.nombre} {perfil.apellidos}</strong></div>
                     <div className="perfil-linea"><span>Rol:</span> <strong>{perfil.rol}</strong></div>
                     <div className="perfil-linea"><span>Cubículo:</span> <strong>{perfil.id_cubiculo ?? '—'}</strong></div>
-                    <div className="perfil-linea"><span>Teléfono de contacto:</span> <strong>{perfil.telefono || '—'}</strong></div>
-                    <div className="perfil-linea"><span>Correo institucional:</span> <strong>{perfil.email || '—'}</strong></div>
+                    <div className="perfil-linea"><span>Teléfono de contacto:</span> <strong>{perfil.telefono ? maskPhone(perfil.telefono) : '—'}</strong></div>
+                    <div className="perfil-linea"><span>Correo institucional:</span> <strong>{perfil.email ? maskEmail(perfil.email) : '—'}</strong></div>
                   </div>
                 </div>
 
