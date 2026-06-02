@@ -11,6 +11,7 @@ import cv2
 import os
 import logging
 import socket
+import time
 from urllib.parse import urlsplit
 
 from app.bd import get_db
@@ -67,6 +68,9 @@ def _prevalidar_rtsp(rtsp_url: str, timeout_ms: int = 6000) -> tuple[bool, str]:
         return True, "ok"
     finally:
         cap.release()
+
+
+MJPEG_PUSH_FPS = float(os.getenv("MJPEG_PUSH_FPS", "15"))
 
 
 def _marcar_camara_activa(db: Session, id_camara: int) -> None:
@@ -205,10 +209,29 @@ async def mjpeg_stream(
     if not admin:
         raise HTTPException(status_code=401, detail="No autorizado")
 
-    # Verificar que el worker existe y está activo
+    # Autorrecuperación: si no existe worker activo, re-iniciarlo automáticamente.
     worker = rtsp_manager._workers.get(id_camara)
     if not worker or not worker.activo:
-        raise HTTPException(status_code=503, detail="Stream no activo. Inicia el worker primero.")
+        camara = db.query(Camara).filter(Camara.id_camara == id_camara).first()
+        if not camara:
+            raise HTTPException(status_code=404, detail="Cámara no encontrada")
+        if not camara.direccion_ip:
+            raise HTTPException(status_code=422, detail="La cámara no tiene IP o URL configurada.")
+
+        try:
+            rtsp_url = resolver_rtsp_url_camara(camara, id_camara)
+            rtsp_manager.set_token(token)
+            await rtsp_manager.iniciar_camara(id_camara, rtsp_url)
+            _marcar_camara_activa(db, id_camara)
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se pudo iniciar el stream automáticamente: {e}",
+            )
+
+        worker = rtsp_manager._workers.get(id_camara)
+        if not worker or not worker.activo:
+            raise HTTPException(status_code=503, detail="Stream no activo.")
 
     log.info(f"[MJPEG Cam#{id_camara}] Cliente conectado")
 
@@ -218,12 +241,24 @@ async def mjpeg_stream(
         NO abre conexión RTSP — evita conflicto con el worker de captura.
         """
         try:
+            max_stale_seg = 4.0
+            sleep_seg = 1.0 / max(MJPEG_PUSH_FPS, 1.0)
             while worker.activo:
                 jpg = worker.ultimo_jpg
 
                 if jpg is None:
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(sleep_seg)
                     continue
+
+                # Si no hay frame nuevo en varios segundos, cerramos este stream
+                # para forzar reconexión del cliente y evitar imagen congelada.
+                age = time.time() - (worker.ultimo_jpg_ts or 0.0)
+                if age > max_stale_seg:
+                    log.warning(
+                        f"[MJPEG Cam#{id_camara}] Frame estancado por {age:.1f}s; cerrando conexión."
+                    )
+                    await asyncio.sleep(sleep_seg)
+                    break
 
                 # Reenviar el último frame disponible mantiene la conexión viva
                 # y evita flashes negros cuando el stream se queda sin un frame nuevo.
@@ -234,7 +269,7 @@ async def mjpeg_stream(
                     + b"\r\n"
                 )
 
-                await asyncio.sleep(0.05)  # ~20 fps máximo de refresco visual
+                await asyncio.sleep(sleep_seg)
 
         except (asyncio.CancelledError, GeneratorExit):
             pass

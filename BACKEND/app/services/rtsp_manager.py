@@ -23,6 +23,8 @@ MAX_REINTENTOS = int(os.getenv("RTSP_REINTENTOS", "5"))
 ESPERA_RETRY   = 8
 JPEG_QUALITY   = int(os.getenv("RTSP_JPEG_QUALITY", "55"))
 SIN_FRAME_TIMEOUT = float(os.getenv("RTSP_SIN_FRAME_TIMEOUT", "6"))
+PREVIEW_FPS = float(os.getenv("RTSP_PREVIEW_FPS", "15"))
+PREVIEW_MAX_WIDTH = int(os.getenv("RTSP_PREVIEW_MAX_WIDTH", "960"))
 
 
 def _primer_valor_no_vacio(*valores: Optional[str], default: str = "") -> str:
@@ -165,11 +167,14 @@ class CameraWorker:
         self.activo               = False
         self.ultimo_resultado: Optional[dict] = None
         self.ultimo_frame_ts: float = 0.0
+        self.ultimo_jpg_ts: float = 0.0
         self._ultimo_frame_monotonic: float = 0.0
-        self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
+        # Cola mínima para priorizar el frame más reciente y evitar backlog de IA.
+        self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._capture_thread: Optional[threading.Thread] = None
         self._analysis_task: Optional[asyncio.Task] = None
         self.ultimo_jpg: Optional[bytes] = None
+        self._marcar_apagada_al_salir = True
 
     # ── Thread de captura (OpenCV) ────────────────────────────────────────────
     def _capture_loop(self) -> None:
@@ -197,6 +202,7 @@ class CameraWorker:
 
             reintentos = 0
             ultimo_analisis = 0.0
+            ultimo_preview = 0.0
             self._ultimo_frame_monotonic = time.monotonic()
             log.info(f"[Cam#{self.id_camara}] ✓ Stream abierto")
 
@@ -207,6 +213,24 @@ class CameraWorker:
                     break
 
                 try:
+                    ahora = time.monotonic()
+                    # Limitar FPS de codificación del preview para mantener fluidez estable
+                    # y reducir picos de CPU cuando hay mucho movimiento.
+                    intervalo_preview = 1.0 / max(PREVIEW_FPS, 1.0)
+                    if ahora - ultimo_preview < intervalo_preview:
+                        continue
+                    ultimo_preview = ahora
+
+                    if PREVIEW_MAX_WIDTH > 0:
+                        h, w = frame.shape[:2]
+                        if w > PREVIEW_MAX_WIDTH:
+                            nuevo_h = max(1, int(h * (PREVIEW_MAX_WIDTH / float(w))))
+                            frame = cv2.resize(  # type: ignore
+                                frame,
+                                (PREVIEW_MAX_WIDTH, nuevo_h),
+                                interpolation=cv2.INTER_AREA,
+                            )
+
                     ok, buf = cv2.imencode(  # type: ignore
                         ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
                     )
@@ -216,10 +240,10 @@ class CameraWorker:
 
                     # Siempre actualizar ultimo_jpg para el MJPEG (sin límite de tiempo)
                     self.ultimo_jpg = jpg
-                    self._ultimo_frame_monotonic = time.monotonic()
+                    self.ultimo_jpg_ts = time.time()
+                    self._ultimo_frame_monotonic = ahora
 
                     # Solo enviar a la queue de análisis cada INTERVALO_SEG
-                    ahora = time.monotonic()
                     if ahora - ultimo_analisis >= INTERVALO_SEG:
                         ultimo_analisis = ahora
                         if self._frame_queue.full():
@@ -250,7 +274,8 @@ class CameraWorker:
                 time.sleep(ESPERA_RETRY)
 
         self.activo = False
-        _actualizar_estado_camara(self.id_camara, False, "Apagada")
+        if self._marcar_apagada_al_salir:
+            _actualizar_estado_camara(self.id_camara, False, "Apagada")
         log.info(f"[Cam#{self.id_camara}] Thread de captura finalizado.")
 
     # ── Task asyncio de análisis (InsightFace) ────────────────────────────────
@@ -272,7 +297,7 @@ class CameraWorker:
                 continue
 
             self.ultimo_frame_ts = time.time()
-            log.info(f"[Cam#{self.id_camara}] Analizando frame...")
+            log.debug(f"[Cam#{self.id_camara}] Analizando frame...")
 
             class _FakeUpload:
                 filename = "frame.jpg"
@@ -330,7 +355,8 @@ class CameraWorker:
         await asyncio.sleep(0)  # ceder control para que la task arranque
         log.info(f"[Cam#{self.id_camara}] Worker completo iniciado.")
 
-    def detener(self) -> None:
+    def detener(self, mantener_estado_activo: bool = False) -> None:
+        self._marcar_apagada_al_salir = not mantener_estado_activo
         self.activo = False
         if self._analysis_task:
             self._analysis_task.cancel()
@@ -350,7 +376,7 @@ class RTSPManager:
 
     async def iniciar_camara(self, id_camara: int, rtsp_url: str) -> None:
         if id_camara in self._workers:
-            self._workers[id_camara].detener()
+            self._workers[id_camara].detener(mantener_estado_activo=True)
             await asyncio.sleep(0.5)  # dar tiempo para limpiar
         worker = CameraWorker(id_camara, rtsp_url)
         self._workers[id_camara] = worker
@@ -362,9 +388,9 @@ class RTSPManager:
             del self._workers[id_camara]
             _actualizar_estado_camara(id_camara, False, "Apagada")
 
-    def detener_todas(self) -> None:
+    def detener_todas(self, preservar_estado: bool = False) -> None:
         for w in self._workers.values():
-            w.detener()
+            w.detener(mantener_estado_activo=preservar_estado)
         self._workers.clear()
 
     def estado(self) -> list[dict]:
@@ -386,7 +412,9 @@ class RTSPManager:
 
         @app.on_event("shutdown")
         async def _shutdown() -> None:
-            self.detener_todas()
+            # En shutdown por recarga (uvicorn --reload), preservar estado
+            # para que startup vuelva a levantar las cámaras activas en BD.
+            self.detener_todas(preservar_estado=True)
 
     async def _arrancar_camaras_activas(self) -> None:
         """Auto-arranca workers para cámaras activas con IP configurada."""
